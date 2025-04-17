@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard VPN Settings</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+        }
+        .info-panel {
+            background-color: #f0f0f0;
+            border-left: 4px solid #2196F3;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+        }
+        .instructions {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WireGuard VPN Client</h1>
+    
+    <div class="info-panel">
+        <p>This application provides a WireGuard VPN client that runs directly on your Axis camera.</p>
+        <p>Configure the parameters below to connect to your WireGuard VPN server.</p>
+    </div>
+    
+    <div class="instructions">
+        <h3>Configuration Instructions</h3>
+        <ul>
+            <li><strong>Private Key:</strong> Your WireGuard private key (keep this secret)</li>
+            <li><strong>Listen Port:</strong> Local UDP port to listen on (default: 51820)</li>
+            <li><strong>Server Endpoint:</strong> Your WireGuard server address and port (e.g., server.example.com:51820)</li>
+            <li><strong>Peer Public Key:</strong> The public key of your WireGuard server</li>
+            <li><strong>Allowed IPs:</strong> IP ranges to route through the VPN (default: 0.0.0.0/0 for all traffic)</li>
+            <li><strong>Client IP:</strong> The IP address for this client on the VPN network (e.g., 10.0.0.2/24)</li>
+        </ul>
+        <p>After configuring these settings, the WireGuard client will automatically restart and apply the changes.</p>
+    </div>
+    
+    <h3>Generating WireGuard Keys</h3>
+    <p>If you need to generate new WireGuard keys, you can use these commands on any system with WireGuard installed:</p>
+    <pre>
+    # Generate private key
+    wg genkey > private.key
+    
+    # Generate public key from private key
+    cat private.key | wg pubkey > public.key
+    </pre>
+    
+    <h3>Status</h3>
+    <p>For detailed status information, check the application logs through the camera's web interface.</p>
+</body>
+</html>
