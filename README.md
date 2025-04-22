@@ -21,7 +21,7 @@ https://www.axis.com/
 
 ## Compatibility
 
-The WireGuard ACAP is compatable with Axis cameras with aarch64 based Soc's.
+The WireGuard ACAP is compatable with Axis cameras with arm and aarch64 based Soc's.
 
 ```
 curl --anyauth "*" -u <username>:<password> <device ip>/axis-cgi/basicdeviceinfo.cgi --data "{\"apiVersion\":\"1.0\",\"context\":\"Client defined request ID\",\"method\":\"getAllProperties\"}"

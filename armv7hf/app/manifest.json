@@ -1,0 +1,54 @@
+{
+    "schemaVersion": "1.7.3",
+    "acapPackageConf": {
+        "setup": {
+            "friendlyName": "WireGuard VPN",
+            "appName": "wireguardconfig",
+            "vendor": "WireGuard - Packaged by Mo3he",
+            "embeddedSdkVersion": "3.0",
+            "vendorUrl": "https://www.wireguard.com",
+            "runMode": "respawn",
+            "version": "1.0.0",
+            "user": {
+                "group": "root",
+                "username": "root"
+                },
+            "architecture": "armv7hf"
+        },
+        "configuration": {
+            "settingPage": "index.html",
+            "paramConfig": [
+                {
+                    "name": "PrivateKey",
+                    "default": "",
+                    "type": "password"
+                },
+                {
+                    "name": "ListenPort",
+                    "default": "",
+                    "type": "string"
+                },
+                {
+                    "name": "Endpoint",
+                    "default": "",
+                    "type": "string"
+                },
+                {
+                    "name": "PeerPublicKey",
+                    "default": "",
+                    "type": "string"
+                },
+                {
+                    "name": "AllowedIPs",
+                    "default": "0.0.0.0/0",
+                    "type": "string"
+                },
+                {
+                    "name": "ClientIP",
+                    "default": "10.0.0.2/24",
+                    "type": "string"
+                }
+            ]
+        }
+    }
+}
