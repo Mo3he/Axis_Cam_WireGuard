@@ -16,7 +16,6 @@
             "architecture": "armv7hf"
         },
         "configuration": {
-            "settingPage": "index.html",
             "paramConfig": [
                 {
                     "name": "PrivateKey",

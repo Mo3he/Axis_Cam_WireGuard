@@ -16,7 +16,6 @@
             "architecture": "aarch64"
         },
         "configuration": {
-            "settingPage": "index.html",
             "paramConfig": [
                 {
                     "name": "PrivateKey",

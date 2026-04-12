@@ -83,16 +83,10 @@ AllowedIPs = 10.0.0.2/32
 Requires Docker.
 
 ```sh
-# aarch64
-cd aarch64
-docker build -t wireguard-acap-aarch64 .
-docker cp $(docker create wireguard-acap-aarch64):/opt/app/WireGuard_VPN_1_1_0_aarch64.eap .
-
-# armv7hf
-cd armv7hf
-docker build -t wireguard-acap-armv7hf .
-docker cp $(docker create wireguard-acap-armv7hf):/opt/app/WireGuard_VPN_1_1_0_armv7hf.eap .
+./build.sh
 ```
+
+This builds both architectures, copies the `.eap` files to the repo root, and cleans up temporary containers.
 
 ## Links
 
