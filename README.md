@@ -25,7 +25,7 @@ Once connected, the camera is reachable from the WireGuard network via:
 
 ## Compatibility
 
-Works on Axis cameras with ARM or aarch64 SoCs running **Axis OS 10, 11, or 12**.
+Works on Axis cameras with ARM or aarch64 SoCs running **Axis OS 11.11 (LTS) or later**, including Axis OS 12.
 
 To check your camera's architecture:
 
