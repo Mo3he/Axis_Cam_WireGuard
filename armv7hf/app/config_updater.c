@@ -1,7 +1,17 @@
 /**
- * Simple file-based configuration updater for WireGuard
- * Based on Tailscale implementation but adapted for WireGuard parameters
+ * ACAP parameter bridge for the WireGuard userspace VPN.
+ *
+ * Responsibilities:
+ *  1. Read WireGuard parameters from the ACAP parameter store (axparameter).
+ *  2. Write them to CONFIG_FILE so the Go binary can read them.
+ *  3. Launch the Go binary (wireguard-userspace) as a child process.
+ *  4. On any parameter change: rewrite CONFIG_FILE and send SIGUSR1 to the
+ *     child so it reloads without dropping the tunnel unnecessarily.
+ *  5. Watchdog: if the child exits unexpectedly, restart it.
+ *
+ * Runs as the unprivileged 'sdk' ACAP user — no root or CAP_NET_ADMIN needed.
  */
+
 #include <axsdk/axparameter.h>
 #include <glib-unix.h>
 #include <stdbool.h>
@@ -15,179 +25,112 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <signal.h>
 
-#define APP_NAME "wireguardconfig"
-#define CONFIG_FILE "/usr/local/packages/wireguardconfig/config.txt"
-#define SCRIPT_PATH "/usr/local/packages/wireguardconfig/start_wireguard.sh"
-#define SCRIPT_SOURCE "/usr/local/packages/wireguardconfig/lib/start_wireguard.sh"
+#define APP_NAME        "wireguardconfig"
+#define CONFIG_FILE     "/usr/local/packages/wireguardconfig/config.txt"
+#define WG_BINARY       "/usr/local/packages/wireguardconfig/lib/wireguard-userspace"
 
-static gboolean signal_handler(gpointer loop) {
-    g_main_loop_quit((GMainLoop*)loop);
-    syslog(LOG_INFO, "WireGuard configuration updater stopping.");
-    return G_SOURCE_REMOVE;
+static pid_t wg_pid = -1;
+
+/* ── child process management ─────────────────────────────────────────────── */
+
+static void stop_wireguard(void) {
+    if (wg_pid <= 0)
+        return;
+
+    if (kill(wg_pid, SIGTERM) == 0)
+        waitpid(wg_pid, NULL, 0);
+
+    wg_pid = -1;
 }
 
-// Copy script from lib folder to main directory
-static void copy_script_file(void) {
-    char buffer[4096];
-    ssize_t bytes_read, bytes_written;
-    int source_fd, dest_fd;
-    
-    syslog(LOG_INFO, "Copying script from %s to %s", SCRIPT_SOURCE, SCRIPT_PATH);
-    
-    // Open source file
-    source_fd = open(SCRIPT_SOURCE, O_RDONLY);
-    if (source_fd < 0) {
-        syslog(LOG_ERR, "Failed to open source script: %s", strerror(errno));
-        return;
-    }
-    
-    // Open destination file (create if doesn't exist, truncate if exists)
-    dest_fd = open(SCRIPT_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0755);
-    if (dest_fd < 0) {
-        syslog(LOG_ERR, "Failed to open destination script: %s", strerror(errno));
-        close(source_fd);
-        return;
-    }
-    
-    // Copy the file
-    while ((bytes_read = read(source_fd, buffer, sizeof(buffer))) > 0) {
-        bytes_written = write(dest_fd, buffer, bytes_read);
-        if (bytes_written != bytes_read) {
-            syslog(LOG_ERR, "Error writing to destination file: %s", strerror(errno));
-            close(source_fd);
-            close(dest_fd);
-            return;
-        }
-    }
-    
-    // Close file descriptors
-    close(source_fd);
-    close(dest_fd);
-    
-    // Make the script executable
-    if (chmod(SCRIPT_PATH, 0755) != 0) {
-        syslog(LOG_ERR, "Failed to make script executable: %s", strerror(errno));
-        return;
-    }
-    
-    syslog(LOG_INFO, "Script copied and made executable successfully");
-}
-
-// Execute the WireGuard script
 static void start_wireguard(void) {
-    syslog(LOG_INFO, "Starting WireGuard VPN script");
-    
-    // Check if script exists, if not, copy it
-    struct stat st;
-    if (stat(SCRIPT_PATH, &st) != 0) {
-        syslog(LOG_INFO, "Script not found at %s, copying from lib folder", SCRIPT_PATH);
-        copy_script_file();
-    }
-    
-    // Fork and execute the script
+    stop_wireguard();
+
     pid_t pid = fork();
     if (pid < 0) {
-        syslog(LOG_ERR, "Failed to fork for WireGuard script: %s", strerror(errno));
+        syslog(LOG_ERR, "fork failed: %s", strerror(errno));
         return;
-    } else if (pid == 0) {
-        // Child process - execute the script
-        execl(SCRIPT_PATH, "start_wireguard.sh", NULL);
-        
-        // If we get here, execl failed
-        syslog(LOG_ERR, "Failed to execute WireGuard script: %s", strerror(errno));
+    }
+    if (pid == 0) {
+        /* child */
+        execl(WG_BINARY, "wireguard-userspace", CONFIG_FILE, NULL);
+        syslog(LOG_ERR, "execl %s failed: %s", WG_BINARY, strerror(errno));
         _exit(1);
     }
-    
-    syslog(LOG_INFO, "WireGuard script started with PID: %d", pid);
+    wg_pid = pid;
+    syslog(LOG_INFO, "wireguard-userspace started (pid %d)", wg_pid);
 }
 
-// Update the configuration file with current parameter values
-static void update_config_file(AXParameter* handle) {
-    GError* error = NULL;
-    gchar* private_key = NULL;
-    gchar* listen_port = NULL;
-    gchar* endpoint = NULL;
-    gchar* peer_public_key = NULL;
-    gchar* allowed_ips = NULL;
-    gchar* client_ip = NULL;
-    FILE* file;
-    
-    // Get parameter values
-    if (!ax_parameter_get(handle, "PrivateKey", &private_key, &error)) {
-        syslog(LOG_ERR, "Failed to get PrivateKey: %s", 
-               error ? error->message : "unknown error");
-        if (error) g_error_free(error);
-        error = NULL;
-        private_key = g_strdup("");
-    }
-    
-    if (!ax_parameter_get(handle, "ListenPort", &listen_port, &error)) {
-        syslog(LOG_ERR, "Failed to get ListenPort: %s", 
-               error ? error->message : "unknown error");
-        if (error) g_error_free(error);
-        error = NULL;
-        listen_port = g_strdup("51820");  // Default WireGuard port
-    }
-    
-    if (!ax_parameter_get(handle, "Endpoint", &endpoint, &error)) {
-        syslog(LOG_ERR, "Failed to get Endpoint: %s", 
-               error ? error->message : "unknown error");
-        if (error) g_error_free(error);
-        error = NULL;
-        endpoint = g_strdup("");
-    }
-    
-    if (!ax_parameter_get(handle, "PeerPublicKey", &peer_public_key, &error)) {
-        syslog(LOG_ERR, "Failed to get PeerPublicKey: %s", 
-               error ? error->message : "unknown error");
-        if (error) g_error_free(error);
-        error = NULL;
-        peer_public_key = g_strdup("");
-    }
-    
-    if (!ax_parameter_get(handle, "AllowedIPs", &allowed_ips, &error)) {
-        syslog(LOG_ERR, "Failed to get AllowedIPs: %s", 
-               error ? error->message : "unknown error");
-        if (error) g_error_free(error);
-        error = NULL;
-        allowed_ips = g_strdup("0.0.0.0/0");  // Default to route all traffic
-    }
-    
-    if (!ax_parameter_get(handle, "ClientIP", &client_ip, &error)) {
-        syslog(LOG_ERR, "Failed to get ClientIP: %s", 
-               error ? error->message : "unknown error");
-        if (error) g_error_free(error);
-        error = NULL;
-        client_ip = g_strdup("10.0.0.2/24");  // Default client IP
-    }
-    
-    // Write to config file
-    file = fopen(CONFIG_FILE, "w");
-    if (file) {
-        fprintf(file, "private_key=%s\n", private_key ? private_key : "");
-        fprintf(file, "listen_port=%s\n", listen_port ? listen_port : "51820");
-        fprintf(file, "endpoint=%s\n", endpoint ? endpoint : "");
-        fprintf(file, "peer_public_key=%s\n", peer_public_key ? peer_public_key : "");
-        fprintf(file, "allowed_ips=%s\n", allowed_ips ? allowed_ips : "0.0.0.0/0");
-        fprintf(file, "client_ip=%s\n", client_ip ? client_ip : "10.0.0.2/24");
-        fclose(file);
-        
-        // Set restrictive permissions since this file contains a private key
-        chmod(CONFIG_FILE, 0600);
-        
-        syslog(LOG_INFO, "Updated configuration file with new parameters");
-        syslog(LOG_INFO, "private_key=%s", private_key && strlen(private_key) > 0 ? "(set)" : "(empty)");
-        syslog(LOG_INFO, "listen_port=%s", listen_port ? listen_port : "51820");
-        syslog(LOG_INFO, "endpoint=%s", endpoint ? endpoint : "(empty)");
-        syslog(LOG_INFO, "peer_public_key=%s", peer_public_key && strlen(peer_public_key) > 0 ? "(set)" : "(empty)");
-        syslog(LOG_INFO, "allowed_ips=%s", allowed_ips ? allowed_ips : "0.0.0.0/0");
-        syslog(LOG_INFO, "client_ip=%s", client_ip ? client_ip : "10.0.0.2/24");
+static void reload_wireguard(void) {
+    if (wg_pid > 0 && kill(wg_pid, 0) == 0) {
+        /* process alive — ask it to reload */
+        kill(wg_pid, SIGUSR1);
     } else {
-        syslog(LOG_ERR, "Failed to open config file for writing");
+        /* not running (first start or crashed) */
+        start_wireguard();
     }
-    
-    // Clean up
+}
+
+/* Watchdog: check the child every 60 s and restart if it has died. */
+static gboolean watchdog_cb(gpointer G_GNUC_UNUSED data) {
+    if (wg_pid > 0) {
+        int status;
+        pid_t ret = waitpid(wg_pid, &status, WNOHANG);
+        if (ret == wg_pid) {
+            syslog(LOG_WARNING, "wireguard-userspace exited (status %d), restarting",
+                   WEXITSTATUS(status));
+            wg_pid = -1;
+            start_wireguard();
+        }
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+/* ── config file ───────────────────────────────────────────────────────────── */
+
+static void update_config_file(AXParameter *handle) {
+    GError *error = NULL;
+    gchar *private_key    = NULL;
+    gchar *listen_port    = NULL;
+    gchar *endpoint       = NULL;
+    gchar *peer_public_key = NULL;
+    gchar *allowed_ips    = NULL;
+    gchar *client_ip      = NULL;
+
+    /* helper macro: get param, fall back to default on error */
+#define GET_PARAM(name, dest, def) \
+    if (!ax_parameter_get(handle, name, &dest, &error)) { \
+        if (error) { g_error_free(error); error = NULL; } \
+        dest = g_strdup(def); \
+    }
+
+    GET_PARAM("PrivateKey",   private_key,     "")
+    GET_PARAM("ListenPort",   listen_port,      "")
+    GET_PARAM("Endpoint",     endpoint,         "")
+    GET_PARAM("PeerPublicKey", peer_public_key, "")
+    GET_PARAM("AllowedIPs",   allowed_ips,      "0.0.0.0/0")
+    GET_PARAM("ClientIP",     client_ip,        "10.0.0.2/24")
+#undef GET_PARAM
+
+    FILE *f = fopen(CONFIG_FILE, "w");
+    if (f) {
+        fprintf(f, "private_key=%s\n",     private_key     ? private_key     : "");
+        fprintf(f, "listen_port=%s\n",     listen_port     ? listen_port     : "");
+        fprintf(f, "endpoint=%s\n",        endpoint        ? endpoint        : "");
+        fprintf(f, "peer_public_key=%s\n", peer_public_key ? peer_public_key : "");
+        fprintf(f, "allowed_ips=%s\n",     allowed_ips     ? allowed_ips     : "0.0.0.0/0");
+        fprintf(f, "client_ip=%s\n",       client_ip       ? client_ip       : "10.0.0.2/24");
+        fclose(f);
+        chmod(CONFIG_FILE, 0600);
+        syslog(LOG_INFO, "config updated (private_key=%s endpoint=%s)",
+               (private_key && *private_key) ? "(set)" : "(empty)",
+               endpoint ? endpoint : "(empty)");
+    } else {
+        syslog(LOG_ERR, "cannot open config file: %s", strerror(errno));
+    }
+
     g_free(private_key);
     g_free(listen_port);
     g_free(endpoint);
@@ -196,89 +139,79 @@ static void update_config_file(AXParameter* handle) {
     g_free(client_ip);
 }
 
-// Handle parameter changes
-static void parameter_changed(const gchar* name, const gchar* value, gpointer handle_void_ptr) {
-    AXParameter* handle = handle_void_ptr;
-    
-    // Extract simple parameter name from the fully qualified name
-    const char* simple_name = name;
-    const char* prefix = "root." APP_NAME ".";
-    if (strncmp(name, prefix, strlen(prefix)) == 0) {
-        simple_name = name + strlen(prefix);
-    }
-    
-    syslog(LOG_INFO, "Parameter changed: %s = %s", simple_name, 
-           (strstr(simple_name, "PrivateKey") || strstr(simple_name, "PeerPublicKey")) ? "(sensitive value)" : value);
-    
-    // Update config file whenever any parameter changes
+/* ── ACAP parameter callback ───────────────────────────────────────────────── */
+
+static void parameter_changed(const gchar *name, const gchar *value,
+                               gpointer handle_void_ptr) {
+    AXParameter *handle = handle_void_ptr;
+
+    /* strip "root.wireguardconfig." prefix for the log */
+    const char *short_name = name;
+    const char *prefix = "root." APP_NAME ".";
+    if (strncmp(name, prefix, strlen(prefix)) == 0)
+        short_name = name + strlen(prefix);
+
+    bool sensitive = strstr(short_name, "Key") != NULL;
+    syslog(LOG_INFO, "parameter changed: %s = %s",
+           short_name, sensitive ? "(sensitive)" : value);
+
     update_config_file(handle);
-    
-    // Restart WireGuard to apply the new settings
-    start_wireguard();
+    reload_wireguard();
 }
 
+/* ── signal handler ────────────────────────────────────────────────────────── */
+
+static gboolean signal_handler(gpointer loop) {
+    syslog(LOG_INFO, "stopping");
+    stop_wireguard();
+    g_main_loop_quit((GMainLoop *)loop);
+    return G_SOURCE_REMOVE;
+}
+
+/* ── main ──────────────────────────────────────────────────────────────────── */
+
 int main(void) {
-    GError* error = NULL;
-    GMainLoop* loop = NULL;
+    GError *error = NULL;
 
-    // Open syslog for logging
     openlog(APP_NAME, LOG_PID, LOG_USER);
-    syslog(LOG_INFO, "WireGuard config updater starting");
+    syslog(LOG_INFO, "starting");
 
-    // Initialize parameter handling
-    AXParameter* handle = ax_parameter_new(APP_NAME, &error);
-    if (handle == NULL) {
-        syslog(LOG_ERR, "Failed to initialize parameters: %s", 
-               error ? error->message : "unknown error");
+    AXParameter *handle = ax_parameter_new(APP_NAME, &error);
+    if (!handle) {
+        syslog(LOG_ERR, "ax_parameter_new: %s",
+               error ? error->message : "unknown");
         if (error) g_error_free(error);
-        exit(1);
+        return 1;
     }
 
-    // Ensure script is copied from lib folder
-    copy_script_file();
-
-    // Create initial config file
     update_config_file(handle);
-    
-    // Start WireGuard VPN script
     start_wireguard();
 
-    // Register for parameter changes - all parameters
-    const char* params[] = {
-        "PrivateKey", "ListenPort", "Endpoint", 
-        "PeerPublicKey", "AllowedIPs", "ClientIP"
+    /* Register callbacks for every parameter */
+    const char *params[] = {
+        "PrivateKey", "ListenPort", "Endpoint",
+        "PeerPublicKey", "AllowedIPs", "ClientIP",
     };
-    
-    for (size_t i = 0; i < sizeof(params)/sizeof(params[0]); i++) {
-        // Try regular parameter name
-        if (!ax_parameter_register_callback(handle, params[i], parameter_changed, handle, &error)) {
-            syslog(LOG_ERR, "Failed to register %s callback: %s", 
-                   params[i], error ? error->message : "unknown error");
-            if (error) {
-                g_error_free(error);
-                error = NULL;
-            }
-            
-            // Try with fully qualified name as fallback
-            char full_name[256];
-            snprintf(full_name, sizeof(full_name), "root.%s.%s", APP_NAME, params[i]);
-            if (!ax_parameter_register_callback(handle, full_name, parameter_changed, handle, NULL)) {
-                syslog(LOG_INFO, "Fallback %s registration failed (this may be normal)", params[i]);
-            }
+    for (size_t i = 0; i < sizeof(params) / sizeof(params[0]); i++) {
+        if (!ax_parameter_register_callback(handle, params[i],
+                                            parameter_changed, handle, &error)) {
+            syslog(LOG_WARNING, "register callback %s: %s",
+                   params[i], error ? error->message : "unknown");
+            if (error) { g_error_free(error); error = NULL; }
         }
     }
 
-    // Set up main loop
-    loop = g_main_loop_new(NULL, FALSE);
+    GMainLoop *loop = g_main_loop_new(NULL, FALSE);
     g_unix_signal_add(SIGTERM, signal_handler, loop);
-    g_unix_signal_add(SIGINT, signal_handler, loop);
-    
-    syslog(LOG_INFO, "WireGuard config updater running. Waiting for parameter changes...");
+    g_unix_signal_add(SIGINT,  signal_handler, loop);
+
+    /* watchdog every 60 s */
+    g_timeout_add_seconds(60, watchdog_cb, NULL);
+
+    syslog(LOG_INFO, "running — waiting for parameter changes");
     g_main_loop_run(loop);
 
-    // Clean up
     g_main_loop_unref(loop);
     ax_parameter_free(handle);
-    
     return 0;
 }

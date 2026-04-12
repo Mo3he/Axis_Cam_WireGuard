@@ -27,3 +27,4 @@ $(PROGS): $(OBJS)
 
 clean:
 	rm -f $(PROGS) *.o *.eap* *_LICENSE.txt package.conf* param.conf tmp*
+	rm -f lib/wireguard-userspace
