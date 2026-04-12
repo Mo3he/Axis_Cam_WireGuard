@@ -24,7 +24,7 @@
                 },
                 {
                     "name": "ListenPort",
-                    "default": "",
+                    "default": "51820",
                     "type": "string"
                 },
                 {
@@ -38,7 +38,7 @@
                     "type": "string"
                 },
                 {
-                    "name": "AllowedIPs",
+                    "name": "AllowedNetworks",
                     "default": "0.0.0.0/0",
                     "type": "string"
                 },

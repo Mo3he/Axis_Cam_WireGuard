@@ -110,7 +110,7 @@ static void update_config_file(AXParameter *handle) {
     GET_PARAM("ListenPort",   listen_port,      "")
     GET_PARAM("Endpoint",     endpoint,         "")
     GET_PARAM("PeerPublicKey", peer_public_key, "")
-    GET_PARAM("AllowedIPs",   allowed_ips,      "0.0.0.0/0")
+    GET_PARAM("AllowedNetworks",   allowed_ips,      "0.0.0.0/0")
     GET_PARAM("ClientIP",     client_ip,        "10.0.0.2/24")
 #undef GET_PARAM
 
@@ -190,7 +190,7 @@ int main(void) {
     /* Register callbacks for every parameter */
     const char *params[] = {
         "PrivateKey", "ListenPort", "Endpoint",
-        "PeerPublicKey", "AllowedIPs", "ClientIP",
+        "PeerPublicKey", "AllowedNetworks", "ClientIP",
     };
     for (size_t i = 0; i < sizeof(params) / sizeof(params[0]); i++) {
         if (!ax_parameter_register_callback(handle, params[i],
