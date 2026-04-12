@@ -4,6 +4,8 @@ A WireGuard VPN client that runs directly on Axis cameras as an ACAP application
 
 Current version: **1.1.0**
 
+Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
+
 ## Overview
 
 Adding a VPN client directly to the camera allows secure remote access without requiring any other equipment or network configuration. WireGuard achieves this in a secure, simple, and lightweight way.
