@@ -34,7 +34,9 @@ curl --digest -u <username>:<password> \
 
 ## Installing
 
-Download the pre-built `.eap` for your camera's architecture and install via the camera's web interface under **Apps → Add app**.
+Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
+
+> **Note:** EAP files are not included in the repository. Always download from the [Releases](https://github.com/Mo3he/Axis_Cam_WireGuard/releases) page.
 
 | Architecture | File |
 |---|---|
