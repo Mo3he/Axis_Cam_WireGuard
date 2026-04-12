@@ -1,80 +1,96 @@
-# The WireGuard installer ACAP
+# WireGuard VPN ACAP
 
-This ACAP packages the scripts and files required to install and configure a WireGuard client on Axis Cameras.
+A WireGuard VPN client that runs directly on Axis cameras as an ACAP application.
 
-Current version 1.0.0
+Current version: **1.1.0**
 
-## Please note!
+## Overview
 
-This  ACAP requires root priviliages to run.
+Adding a VPN client directly to the camera allows secure remote access without requiring any other equipment or network configuration. WireGuard achieves this in a secure, simple, and lightweight way.
 
-## Purpose
+Version 1.1.0 is a full rewrite of the networking layer. The app now runs entirely in userspace using [wireguard-go](https://github.com/WireGuard/wireguard-go) + [gVisor netstack](https://gvisor.dev/), which means:
 
-Adding a VPN client directly to the camera allows secure remote access to the device without requiring any other equipment or network configuration.
-WireGuard achieves this in a secure, simple to setup and easy to use way.
+- **No root required** — runs as the standard unprivileged `sdk` ACAP user
+- **Compatible with Axis OS 11 and 12** — OS 12 blocked root ACAP apps; this version works on both
+- **No kernel TUN device** — all networking is handled inside the process
 
-## Links
+## How it works
 
-https://www.wireguard.com/
+Once connected, the camera is reachable from the WireGuard network via:
 
-https://www.axis.com/
+- **Direct port forwarding** — ports 80 (HTTP), 443 (HTTPS), and 554 (RTSP) on the WireGuard IP are transparently forwarded to the camera's local services. Point your browser or RTSP client directly at the WireGuard IP.
+- **SOCKS5 proxy on port 1080** — configure any SOCKS5-aware client to use `<wireguard-ip>:1080` for access to any camera port.
 
 ## Compatibility
 
-The WireGuard ACAP is compatable with Axis cameras with arm and aarch64 based Soc's.
+Works on Axis cameras with ARM or aarch64 SoCs running **Axis OS 10, 11, or 12**.
 
-```
-curl --anyauth "*" -u <username>:<password> <device ip>/axis-cgi/basicdeviceinfo.cgi --data "{\"apiVersion\":\"1.0\",\"context\":\"Client defined request ID\",\"method\":\"getAllProperties\"}"
-```
+To check your camera's architecture:
 
-where `<device ip>` is the IP address of the Axis device, `<username>` is the root username and `<password>` is the root password. Please
-note that you need to enclose your password with quotes (`'`) if it contains special characters.
+```sh
+curl --digest -u <username>:<password> \
+  http://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture
+```
 
 ## Installing
 
-The recommended way to install this ACAP is to use the pre built eap file.
-Go to "Apps" on the camera and click "Add app".
+Download the pre-built `.eap` for your camera's architecture and install via the camera's web interface under **Apps → Add app**.
 
+| Architecture | File |
+|---|---|
+| aarch64 (most cameras 2019+) | `WireGuard_VPN_1_1_0_aarch64.eap` |
+| armv7hf (older cameras) | `WireGuard_VPN_1_1_0_armv7hf.eap` |
 
-## Using the WireGuard ACAP
+## Configuration
 
-The WireGuard ACAP will run a script on startup that sets the required permissions and starts the service and app.
+Open the app's settings page in the camera web UI and fill in:
 
-You will need a WireGuard server to use the ACAP
+| Parameter | Description |
+|---|---|
+| **Private Key** | Your WireGuard private key for this camera (keep secret) |
+| **Listen Port** | Local UDP port (leave blank for random, or use 51820) |
+| **Endpoint** | WireGuard server address and port — e.g. `vpn.example.com:51820` |
+| **Peer Public Key** | Public key of your WireGuard server |
+| **Allowed IPs** | Routes to send through the VPN (default: `0.0.0.0/0` for all traffic) |
+| **Client IP** | This camera's IP address on the VPN network — e.g. `10.0.0.2/24` |
 
-Configure the parameters below to connect to your WireGuard VPN server.
+The Private Key field will appear blank when you revisit the settings — this is expected behaviour for password-type parameters. The key is saved securely.
 
-Private Key: Your WireGuard private key (keep this secret)
+### Generating keys
 
-Listen Port: Local UDP port to listen on (default: 51820)
+```sh
+# Generate a private key for the camera
+wg genkey | tee camera-private.key | wg pubkey > camera-public.key
 
-Server Endpoint: Your WireGuard server address and port (e.g., server.example.com:51820)
-
-Peer Public Key: The public key of your WireGuard server
-
-Allowed IPs: IP ranges to route through the VPN (default: 0.0.0.0/0 for all traffic)
-
-Client IP: The IP address for this client on the VPN network (e.g., 10.0.0.2/24)
-
-When uninstalling the ACAP, all changes and files are removed from the camera.
-
-## Updating WireGuard version
-
-The eap files will be updated from time to time and simply installing the new version over the old will update all files.
-
-It's also possible to build and use a locally built image as all necesary files are provided.
-
-Replace binaries "WG" and "wireguard-go" in lib folder with new versions.
-Make sure you use the files for the correct Soc.
-
-
-To build, 
-From main directory of the version you want (arm/aarch64)
-
-```
-docker build --tag <package name> . 
-```
-```
-docker cp $(docker create <package name>):/opt/app ./build 
+# The private key goes into the ACAP settings
+# The public key goes into your server's peer config
 ```
 
+### Server-side peer config (example)
+
+```ini
+[Peer]
+PublicKey = <camera-public.key contents>
+AllowedIPs = 10.0.0.2/32
+```
+
+## Building from source
+
+Requires Docker.
+
+```sh
+# aarch64
+cd aarch64
+docker build -t wireguard-acap-aarch64 .
+docker cp $(docker create wireguard-acap-aarch64):/opt/app/WireGuard_VPN_1_1_0_aarch64.eap .
+
+# armv7hf
+cd armv7hf
+docker build -t wireguard-acap-armv7hf .
+docker cp $(docker create wireguard-acap-armv7hf):/opt/app/WireGuard_VPN_1_1_0_armv7hf.eap .
+```
+
+## Links
+
+- https://www.wireguard.com/
+- https://www.axis.com/

@@ -8,11 +8,11 @@
             "embeddedSdkVersion": "3.0",
             "vendorUrl": "https://www.wireguard.com",
             "runMode": "respawn",
-            "version": "1.0.0",
+            "version": "1.1.0",
             "user": {
-                "group": "root",
-                "username": "root"
-                },
+                "group": "sdk",
+                "username": "sdk"
+            },
             "architecture": "armv7hf"
         },
         "configuration": {
