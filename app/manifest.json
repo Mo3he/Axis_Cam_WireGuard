@@ -4,9 +4,9 @@
         "setup": {
             "friendlyName": "WireGuard VPN",
             "appName": "wireguardconfig",
-            "vendor": "WireGuard - Packaged by Mo3he",
+            "vendor": "Mo3he",
             "embeddedSdkVersion": "3.0",
-            "vendorUrl": "https://www.wireguard.com",
+            "vendorUrl": "https://github.com/Mo3he/Axis_Cam_WireGuard",
             "runMode": "respawn",
             "version": "1.2.0",
             "user": {

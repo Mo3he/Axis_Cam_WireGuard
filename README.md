@@ -6,7 +6,9 @@ Current version: **1.2.0**
 
 Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
 
-### Disclaimer: This is an independent, community-developed ACAP package and is not an official Axis Communications product. It was developed entirely on personal time and is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com 
+### Disclaimer: This is an independent, community-developed ACAP package and is not an official Axis Communications product. It was developed entirely on personal time and is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com
+
+> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
 
 ## Overview
 
