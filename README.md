@@ -2,7 +2,7 @@
 
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP application.
 
-Current version: **1.1.0**
+Current version: **1.2.0**
 
 Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
 
@@ -10,11 +10,17 @@ Download the pre-built `.eap` for your camera's architecture from the [latest re
 
 Adding a VPN client directly to the camera allows secure remote access without requiring any other equipment or network configuration. WireGuard achieves this in a secure, simple, and lightweight way.
 
-Version 1.1.0 is a full rewrite of the networking layer. The app now runs entirely in userspace using [wireguard-go](https://github.com/WireGuard/wireguard-go) + [gVisor netstack](https://gvisor.dev/), which means:
+The app runs entirely in userspace using [wireguard-go](https://github.com/WireGuard/wireguard-go) + [gVisor netstack](https://gvisor.dev/), which means:
 
 - **No root required** — runs as the standard unprivileged `sdk` ACAP user
 - **Compatible with Axis OS 11 and 12** — OS 12 blocked root ACAP apps; this version works on both
 - **No kernel TUN device** — all networking is handled inside the process
+
+### What's new in 1.2.0
+
+- **Redesigned web UI** — configuration is now stored via the standard ACAP parameter store (`axparameter`) and exposed through the camera's built-in `/axis-cgi/param.cgi` — no embedded HTTP server in the tunnel process
+- **Import `.conf`** — paste or drop a standard WireGuard `.conf` file to populate all fields at once
+- **Live status & log panel** — connection state and service log shown directly on the settings page, auto-refreshed every 5 seconds
 
 ## How it works
 
@@ -42,8 +48,8 @@ Download the pre-built `.eap` for your camera's architecture from the [latest re
 
 | Architecture | File |
 |---|---|
-| aarch64 (most cameras 2019+) | `WireGuard_VPN_1_1_0_aarch64.eap` |
-| armv7hf (older cameras) | `WireGuard_VPN_1_1_0_armv7hf.eap` |
+| aarch64 (most cameras 2019+) | `WireGuard_VPN_1_2_0_aarch64.eap` |
+| armv7hf (older cameras) | `WireGuard_VPN_1_2_0_armv7hf.eap` |
 
 ## Configuration
 
@@ -59,6 +65,8 @@ Open the app's settings page in the camera web UI and fill in:
 | **Client IP** | This camera's IP address on the VPN network — e.g. `10.0.0.2/24` |
 
 The Private Key field will appear blank when you revisit the settings — this is expected behaviour for password-type parameters. The key is saved securely.
+
+> **Tip:** Click **Import .conf** on the settings page to load all fields from a standard WireGuard `.conf` file at once.
 
 ### Generating keys
 

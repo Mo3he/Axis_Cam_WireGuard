@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WireGuard VPN</title>
+<style>
+    :root {
+        --bg: #0f1117;
+        --surface: #181b23;
+        --surface2: #1e2230;
+        --border: #262a35;
+        --text: #e4e6ed;
+        --muted: #8b8fa3;
+        --accent: #29d4a8;
+        --green: #22c55e;
+        --yellow: #f59e0b;
+        --red: #ef4444;
+        --radius: 10px;
+        --mono: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    html[data-theme="light"] {
+        --bg: #f5f6f8;
+        --surface: #ffffff;
+        --surface2: #f0f1f4;
+        --border: #e0e3e8;
+        --text: #1a1a2e;
+        --muted: #6b7084;
+        --accent: #0d9e7a;
+        --green: #16a34a;
+        --yellow: #d97706;
+        --red: #dc2626;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 20px;
+        font-size: 14px;
+        max-width: 720px;
+        margin: 0 auto;
+        line-height: 1.5;
+    }
+    .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .header h1 { font-size: 18px; font-weight: 700; }
+    .theme-btn {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        cursor: pointer;
+        border-radius: 8px;
+        padding: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .theme-btn:hover { color: var(--text); border-color: var(--muted); }
+    .theme-btn svg { width: 16px; height: 16px; }
+
+    .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px;
+        margin-bottom: 14px;
+    }
+    .card-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--muted);
+        margin-bottom: 14px;
+    }
+
+    .field-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .field-grid.full { grid-template-columns: 1fr; }
+    .field label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--muted);
+        margin-bottom: 4px;
+    }
+    .field .input-wrap { position: relative; }
+    .field input {
+        width: 100%;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 8px 10px;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+    .field input:focus { border-color: var(--accent); }
+    .field input::placeholder { color: var(--muted); }
+    .show-btn {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 11px;
+        padding: 2px 4px;
+    }
+    .show-btn:hover { color: var(--text); }
+
+    .btn-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .btn {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .btn-secondary {
+        background: var(--surface2);
+        color: var(--text);
+        border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--muted); }
+
+    .cfg-msg { font-size: 12px; margin-top: 8px; min-height: 16px; }
+    .cfg-msg.ok  { color: var(--green); }
+    .cfg-msg.err { color: var(--red); }
+
+    .status-banner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        margin-bottom: 14px;
+    }
+    .status-banner.connected    { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.2); }
+    .status-banner.connecting   { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); }
+    .status-banner.disconnected { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.2); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .status-banner.connected    .dot { background: var(--green);  box-shadow: 0 0 0 3px rgba(34,197,94,0.2); }
+    .status-banner.connecting   .dot { background: var(--yellow); box-shadow: 0 0 0 3px rgba(245,158,11,0.2); animation: pulse 1.5s infinite; }
+    .status-banner.disconnected .dot { background: var(--red);    box-shadow: 0 0 0 3px rgba(239,68,68,0.2); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .status-text { font-size: 14px; font-weight: 600; }
+    .status-banner.connected    .status-text { color: var(--green); }
+    .status-banner.connecting   .status-text { color: var(--yellow); }
+    .status-banner.disconnected .status-text { color: var(--red); }
+    .status-time { margin-left: auto; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .info-item { background: var(--surface2); border-radius: 8px; padding: 12px 14px; }
+    .info-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); margin-bottom: 4px; }
+    .info-value { font-size: 13px; font-weight: 600; font-family: var(--mono); word-break: break-all; }
+    .info-value.dim { color: var(--muted); font-weight: 400; }
+
+    .log-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .log-badge { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .log-toggle { font-size: 12px; color: var(--accent); background: none; border: none; cursor: pointer; font-weight: 600; }
+    .log-toggle:hover { text-decoration: underline; }
+    .log-box {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px;
+        max-height: 400px;
+        overflow-y: auto;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        line-height: 1.7;
+        color: var(--muted);
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    .log-box .log-line { display: block; }
+    .log-box .log-line:hover { background: rgba(41,212,168,0.06); }
+    .log-line .ts { color: var(--muted); opacity: 0.6; }
+    .log-line .msg-info  { color: var(--accent); }
+    .log-line .msg-warn  { color: var(--yellow); }
+    .log-line .msg-err   { color: var(--red); }
+    .log-line .msg-ok    { color: var(--green); }
+
+    .refresh-bar { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; font-size: 11px; color: var(--muted); }
+
+    @media (max-width: 480px) {
+        body { padding: 14px; }
+        .field-grid { grid-template-columns: 1fr; }
+        .info-grid  { grid-template-columns: 1fr; }
+    }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <h1>WireGuard VPN</h1>
+    </div>
+    <button class="theme-btn" id="themeToggle" aria-label="Toggle theme">
+        <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="iconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+    </button>
+</div>
+
+<!-- Configuration -->
+<div class="card">
+    <div class="card-title">Configuration</div>
+    <div class="field-grid full">
+        <div class="field">
+            <label>Private Key</label>
+            <div class="input-wrap">
+                <input type="password" id="f-privatekey" placeholder="Base64 private key" autocomplete="off" spellcheck="false"/>
+                <button class="show-btn" id="show-key" type="button">show</button>
+            </div>
+        </div>
+    </div>
+    <div class="field-grid">
+        <div class="field">
+            <label>Client IP / Address</label>
+            <input type="text" id="f-clientip" placeholder="10.0.0.2/24" autocomplete="off" spellcheck="false"/>
+        </div>
+        <div class="field">
+            <label>Listen Port</label>
+            <input type="text" id="f-listenport" placeholder="51820" autocomplete="off" spellcheck="false"/>
+        </div>
+    </div>
+    <div class="field-grid full">
+        <div class="field">
+            <label>Peer Public Key</label>
+            <input type="text" id="f-peerpubkey" placeholder="Base64 server public key" autocomplete="off" spellcheck="false"/>
+        </div>
+    </div>
+    <div class="field-grid full">
+        <div class="field">
+            <label>Endpoint</label>
+            <input type="text" id="f-endpoint" placeholder="vpn.example.com:51820" autocomplete="off" spellcheck="false"/>
+        </div>
+    </div>
+    <div class="field-grid full">
+        <div class="field">
+            <label>Allowed IPs</label>
+            <input type="text" id="f-allowedips" placeholder="0.0.0.0/0" autocomplete="off" spellcheck="false"/>
+        </div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+        <button class="btn" id="save-btn">Save</button>
+        <label class="btn btn-secondary" style="cursor:pointer;">
+            Import .conf
+            <input type="file" id="conf-file" accept=".conf" style="display:none;"/>
+        </label>
+    </div>
+    <div class="cfg-msg" id="cfg-msg"></div>
+</div>
+
+<!-- Status -->
+<div id="status-banner" class="status-banner connecting">
+    <span class="dot"></span>
+    <span id="status-text" class="status-text">Checking...</span>
+    <span id="status-time" class="status-time"></span>
+</div>
+
+<!-- Connection Details (shown when connected) -->
+<div class="card" id="info-card" style="display:none;">
+    <div class="card-title">Connection Details</div>
+    <div class="info-grid">
+        <div class="info-item">
+            <div class="info-label">WireGuard IP</div>
+            <div class="info-value" id="d-clientip">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Endpoint</div>
+            <div class="info-value" id="d-endpoint">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">HTTP (port 80)</div>
+            <div class="info-value" id="d-http">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">HTTPS (port 443)</div>
+            <div class="info-value" id="d-https">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">RTSP (port 554)</div>
+            <div class="info-value" id="d-rtsp">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">SOCKS5 Proxy</div>
+            <div class="info-value" id="d-socks">-</div>
+        </div>
+    </div>
+</div>
+
+<!-- Logs -->
+<div class="card">
+    <div class="log-controls">
+        <div class="card-title" style="margin-bottom:0;">Service Log</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <span id="log-count" class="log-badge"></span>
+            <button class="log-toggle" id="log-scroll-btn">Scroll to bottom</button>
+        </div>
+    </div>
+    <div class="log-box" id="log-box">Loading logs...</div>
+</div>
+
+<div class="refresh-bar">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+    </svg>
+    <span>Auto-refresh every 5s</span>
+</div>
+
+<script>
+(function() {
+    var APP      = 'wireguardconfig';
+    var LOG_URL  = '/axis-cgi/admin/systemlog.cgi?appname=' + APP;
+    var PARAM_URL = '/axis-cgi/param.cgi';
+    var logBox   = document.getElementById('log-box');
+    var autoScroll = true;
+
+    // ── Theme ──────────────────────────────────────────────────────────────
+    var toggle = document.getElementById('themeToggle');
+    var sun    = document.getElementById('iconSun');
+    var moon   = document.getElementById('iconMoon');
+    var root   = document.documentElement;
+
+    function applyTheme(t) {
+        if (t === 'light') {
+            root.setAttribute('data-theme', 'light');
+            sun.style.display = 'none';
+            moon.style.display = 'block';
+        } else {
+            root.removeAttribute('data-theme');
+            sun.style.display = 'block';
+            moon.style.display = 'none';
+        }
+    }
+    var stored = localStorage.getItem('wg-acap-theme');
+    if (stored) applyTheme(stored);
+    else if (window.matchMedia('(prefers-color-scheme: light)').matches) applyTheme('light');
+    toggle.addEventListener('click', function() {
+        var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        localStorage.setItem('wg-acap-theme', next);
+        applyTheme(next);
+    });
+
+    // ── Log scroll ─────────────────────────────────────────────────────────
+    document.getElementById('log-scroll-btn').addEventListener('click', function() {
+        logBox.scrollTop = logBox.scrollHeight;
+        autoScroll = true;
+    });
+    logBox.addEventListener('scroll', function() {
+        autoScroll = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < 40;
+    });
+
+    // ── Private key visibility toggle ──────────────────────────────────────
+    var keyInput  = document.getElementById('f-privatekey');
+    var showBtn   = document.getElementById('show-key');
+    showBtn.addEventListener('click', function() {
+        if (keyInput.type === 'password') {
+            keyInput.type = 'text';
+            showBtn.textContent = 'hide';
+        } else {
+            keyInput.type = 'password';
+            showBtn.textContent = 'show';
+        }
+    });
+
+    // ── Log rendering ──────────────────────────────────────────────────────
+    function classifyLine(msg) {
+        if (/error|fail|panic|fatal/i.test(msg))                          return 'msg-err';
+        if (/warn|timeout|retry/i.test(msg))                              return 'msg-warn';
+        if (/tunnel up|connected|running|assigned|online|ready/i.test(msg)) return 'msg-ok';
+        if (/starting|joining|waiting|reload|reloading/i.test(msg))      return 'msg-info';
+        return '';
+    }
+    function escHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function renderLogs(txt) {
+        var lines = txt.split('\n').filter(function(l) { return l.trim(); });
+        document.getElementById('log-count').textContent = lines.length + ' lines';
+        var h = '';
+        for (var i = 0; i < lines.length; i++) {
+            var parts = lines[i].match(/^(\S+\s+\d+\s+[\d:]+)\s+(.*)/);
+            var cls = classifyLine(lines[i]);
+            if (parts) {
+                h += '<span class="log-line"><span class="ts">' + escHtml(parts[1]) + '</span> <span class="' + cls + '">' + escHtml(parts[2]) + '</span></span>\n';
+            } else {
+                h += '<span class="log-line"><span class="' + cls + '">' + escHtml(lines[i]) + '</span></span>\n';
+            }
+        }
+        logBox.innerHTML = h;
+        if (autoScroll) logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    // ── Status parsing ─────────────────────────────────────────────────────
+    function parseStatus(txt) {
+        // Extract most recent tunnel-up IP
+        var ipMatches = txt.match(/WireGuard tunnel up[^\n]*ip=(\S+)/g);
+        var ip = null;
+        if (ipMatches) {
+            var m = ipMatches[ipMatches.length - 1].match(/ip=(\S+)/);
+            if (m) ip = m[1].split('/')[0];
+        }
+        // Extract most recent endpoint
+        var epMatches = txt.match(/WireGuard tunnel up[^\n]*endpoint=(\S+)/g);
+        var ep = null;
+        if (epMatches) {
+            var em = epMatches[epMatches.length - 1].match(/endpoint=(\S+)/);
+            if (em) ep = em[1];
+        }
+        var isUp         = /WireGuard tunnel up/.test(txt);
+        var isIncomplete = /config incomplete/.test(txt) && !isUp;
+        var hasError     = /level=ERROR/.test(txt.split('\n').slice(-20).join('\n'));
+        if (isUp)         return { state: 'connected',    ip: ip, endpoint: ep };
+        if (isIncomplete) return { state: 'connecting',   ip: null, endpoint: null };
+        if (hasError)     return { state: 'disconnected', ip: null, endpoint: null };
+        return              { state: 'connecting',   ip: null, endpoint: null };
+    }
+
+    function renderStatus(r) {
+        var banner = document.getElementById('status-banner');
+        var text   = document.getElementById('status-text');
+        var info   = document.getElementById('info-card');
+        banner.className = 'status-banner ' + r.state;
+        var labels = { connected: 'Connected', connecting: 'Connecting…', disconnected: 'Stopped' };
+        text.textContent = labels[r.state] || r.state;
+
+        if (r.state === 'connected' && r.ip) {
+            document.getElementById('d-clientip').textContent  = r.ip;
+            document.getElementById('d-endpoint').textContent  = r.endpoint || '-';
+            document.getElementById('d-http').textContent      = r.ip + ':80';
+            document.getElementById('d-https').textContent     = r.ip + ':443';
+            document.getElementById('d-rtsp').textContent      = r.ip + ':554';
+            document.getElementById('d-socks').textContent     = r.ip + ':1080';
+            info.style.display = '';
+        } else {
+            info.style.display = 'none';
+        }
+
+        var now = new Date();
+        document.getElementById('status-time').textContent =
+            ('0'+now.getHours()).slice(-2) + ':' +
+            ('0'+now.getMinutes()).slice(-2) + ':' +
+            ('0'+now.getSeconds()).slice(-2);
+    }
+
+    // ── Load config from param.cgi ──────────────────────────────────────────
+    function loadConfig() {
+        fetch(PARAM_URL + '?action=list&group=root.' + APP, {
+            cache: 'no-store', credentials: 'same-origin'
+        })
+        .then(function(r) { return r.text(); })
+        .then(function(txt) {
+            function getParam(name) {
+                var m = txt.match(new RegExp(name + '=(.*)'));
+                return m ? m[1].trim() : '';
+            }
+            document.getElementById('f-privatekey').value  = getParam('PrivateKey');
+            document.getElementById('f-listenport').value  = getParam('ListenPort');
+            document.getElementById('f-endpoint').value    = getParam('Endpoint');
+            document.getElementById('f-peerpubkey').value  = getParam('PeerPublicKey');
+            document.getElementById('f-allowedips').value  = getParam('AllowedIPs');
+            document.getElementById('f-clientip').value    = getParam('ClientIP');
+        })
+        .catch(function() {});
+    }
+
+    // ── Save config to param.cgi ───────────────────────────────────────────
+    var saveBtn = document.getElementById('save-btn');
+    var cfgMsg  = document.getElementById('cfg-msg');
+
+    function setMsg(txt, cls) {
+        cfgMsg.textContent = txt;
+        cfgMsg.className   = 'cfg-msg ' + (cls || '');
+    }
+
+    saveBtn.addEventListener('click', function() {
+        saveBtn.disabled = true;
+        setMsg('Saving…');
+        var body = [
+            'action=update',
+            'root.' + APP + '.PrivateKey='    + encodeURIComponent(document.getElementById('f-privatekey').value.trim()),
+            'root.' + APP + '.ListenPort='    + encodeURIComponent(document.getElementById('f-listenport').value.trim()),
+            'root.' + APP + '.Endpoint='      + encodeURIComponent(document.getElementById('f-endpoint').value.trim()),
+            'root.' + APP + '.PeerPublicKey=' + encodeURIComponent(document.getElementById('f-peerpubkey').value.trim()),
+            'root.' + APP + '.AllowedIPs='    + encodeURIComponent(document.getElementById('f-allowedips').value.trim()),
+            'root.' + APP + '.ClientIP='      + encodeURIComponent(document.getElementById('f-clientip').value.trim())
+        ].join('&');
+
+        fetch(PARAM_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+        })
+        .then(function(r) { return r.text(); })
+        .then(function(txt) {
+            if (/^OK/.test(txt.trim())) {
+                setMsg('Saved — reconnecting…', 'ok');
+            } else {
+                setMsg('Error: ' + txt.trim(), 'err');
+            }
+        })
+        .catch(function(e) { setMsg('Request failed: ' + e, 'err'); })
+        .finally(function() { saveBtn.disabled = false; });
+    });
+
+    // ── Import .conf file ──────────────────────────────────────────────────
+    document.getElementById('conf-file').addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+            var txt = ev.target.result;
+            function confVal(key) {
+                var m = txt.match(new RegExp('^\\s*' + key + '\\s*=\\s*(.+)', 'im'));
+                return m ? m[1].trim() : '';
+            }
+            var pk = confVal('PrivateKey');
+            var addr = confVal('Address');
+            var lp   = confVal('ListenPort');
+            var pub  = confVal('PublicKey');
+            var ep   = confVal('Endpoint');
+            var aip  = confVal('AllowedIPs');
+
+            if (pk)   document.getElementById('f-privatekey').value  = pk;
+            if (addr) document.getElementById('f-clientip').value    = addr;
+            if (lp)   document.getElementById('f-listenport').value  = lp;
+            if (pub)  document.getElementById('f-peerpubkey').value  = pub;
+            if (ep)   document.getElementById('f-endpoint').value    = ep;
+            if (aip)  document.getElementById('f-allowedips').value  = aip;
+
+            setMsg('Config imported from ' + file.name + ' — click Save to apply.', 'ok');
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+
+    // ── Refresh loop ───────────────────────────────────────────────────────
+    function refresh() {
+        fetch(LOG_URL, { cache: 'no-store', credentials: 'same-origin' })
+        .then(function(r) { return r.text(); })
+        .then(function(txt) {
+            renderLogs(txt);
+            renderStatus(parseStatus(txt));
+        })
+        .catch(function() {
+            document.getElementById('status-text').textContent = 'Unable to fetch logs';
+        });
+    }
+
+    loadConfig();
+    refresh();
+    setInterval(refresh, 5000);
+})();
+</script>
+</body>
+</html>

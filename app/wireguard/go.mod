@@ -2,11 +2,13 @@ module wireguard-acap
 
 go 1.22
 
-require golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
+require (
+	golang.org/x/crypto v0.17.0
+	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
+)
 
 require (
 	github.com/google/btree v1.1.2 // indirect
-	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/time v0.5.0 // indirect

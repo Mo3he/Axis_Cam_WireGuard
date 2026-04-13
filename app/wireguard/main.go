@@ -4,11 +4,9 @@
 //
 // Network access model:
 //   - Transparent TCP port forwarding for common camera ports (80, 443, 554)
-//     → VPN peers can browse/stream directly to the WireGuard IP with no config
-//   - SOCKS5 proxy on port 1080 → full access to any camera port without
-//     needing per-port forwarders; configure your browser/client once
+//   - SOCKS5 proxy on port 1080 for full access to any camera port
 //
-// Config is read from CONFIG_FILE (written by the C ACAP binary).
+// Config is read from CONFIG_FILE (written by the C ACAP bridge via axparameter).
 // Reloads on SIGUSR1 or when the config file modification time changes.
 
 package main
@@ -16,8 +14,8 @@ package main
 import (
 	"bufio"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -41,7 +39,6 @@ const defaultConfigPath = "/usr/local/packages/wireguardconfig/config.txt"
 var transparentPorts = []int{80, 443, 554}
 
 // socks5Port is the SOCKS5 proxy port on the WireGuard interface.
-// Clients connect here to reach any port on the camera.
 const socks5Port = 1080
 
 // Config holds parsed WireGuard settings from the config file.
@@ -350,48 +347,19 @@ func main() {
 		configPath = os.Args[1]
 	}
 
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	slog.Info("wireguard-userspace starting", "config", configPath)
 
-	var current *tunnel
+	app := &appState{configPath: configPath}
 
 	// Seed lastMod from the file so the 30s ticker doesn't trigger a
 	// spurious reload on its first fire (which would restart the tunnel
 	// before the 25s keepalive has a chance to initiate the handshake).
-	var lastMod time.Time
 	if info, err := os.Stat(configPath); err == nil {
-		lastMod = info.ModTime()
+		app.lastMod = info.ModTime()
 	}
 
-	reload := func() {
-		cfg, err := loadConfig(configPath)
-		if err != nil {
-			slog.Error("load config", "err", err)
-			return
-		}
-		if cfg.PrivateKey == "" || cfg.PeerPubKey == "" {
-			slog.Info("config incomplete — waiting for keys to be set")
-			return
-		}
-
-		if current != nil {
-			current.close()
-			current = nil
-		}
-
-		t, err := startTunnel(cfg)
-		if err != nil {
-			slog.Error("start tunnel", "err", err)
-			return
-		}
-		current = t
-		slog.Info("WireGuard tunnel up",
-			"ip", cfg.ClientIP,
-			"endpoint", cfg.Endpoint,
-			"socks5_port", socks5Port,
-		)
-	}
-
-	reload()
+	app.reload()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGUSR1)
@@ -405,21 +373,64 @@ func main() {
 			switch sig {
 			case syscall.SIGUSR1:
 				slog.Info("SIGUSR1 received — reloading config")
-				reload()
+				app.reload()
 			default:
 				slog.Info("shutting down")
-				if current != nil {
-					current.close()
+				app.mu.Lock()
+				if app.current != nil {
+					app.current.close()
 				}
+				app.mu.Unlock()
 				return
 			}
 		case <-ticker.C:
 			info, err := os.Stat(configPath)
-			if err == nil && info.ModTime().After(lastMod) {
-				lastMod = info.ModTime()
+			if err == nil && info.ModTime().After(app.lastMod) {
+				app.lastMod = info.ModTime()
 				slog.Info("config file changed — reloading")
-				reload()
+				app.reload()
 			}
 		}
 	}
+}
+
+// ── app state ────────────────────────────────────────────────────────────────
+
+type appState struct {
+	mu         sync.Mutex
+	current    *tunnel
+	configPath string
+	lastMod    time.Time
+}
+
+func (a *appState) reload() {
+	cfg, err := loadConfig(a.configPath)
+	if err != nil {
+		slog.Error("load config", "err", err)
+		return
+	}
+	if cfg.PrivateKey == "" || cfg.PeerPubKey == "" {
+		slog.Info("config incomplete — waiting for keys to be set")
+		return
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.current != nil {
+		a.current.close()
+		a.current = nil
+	}
+
+	t, err := startTunnel(cfg)
+	if err != nil {
+		slog.Error("start tunnel", "err", err)
+		return
+	}
+	a.current = t
+	slog.Info("WireGuard tunnel up",
+		"ip", cfg.ClientIP,
+		"endpoint", cfg.Endpoint,
+		"socks5_port", socks5Port,
+	)
 }
