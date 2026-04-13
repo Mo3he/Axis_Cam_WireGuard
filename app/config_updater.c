@@ -1,3 +1,6 @@
+// Copyright (C) 2024  Mo3he
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * ACAP parameter bridge for the WireGuard userspace VPN.
  *
