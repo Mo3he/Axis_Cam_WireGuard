@@ -6,7 +6,7 @@ ARG SDK=acap-native-sdk
 
 FROM ${REPO}/${SDK}:${VERSION}-${ARCH}-ubuntu${UBUNTU_VERSION}
 
-# Install Go (amd64 build host, cross-compiling for arm64 camera)
+# Install Go (amd64 build host, cross-compiling for target camera arch)
 ARG GO_VERSION=1.22.4
 RUN apt-get update -qq && apt-get install -y --no-install-recommends wget ca-certificates && \
     wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
@@ -19,9 +19,18 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 COPY ./app /opt/app/
 WORKDIR /opt/app
 
-# Cross-compile the Go binary for aarch64 (arm64)
+# Patch the architecture placeholder in manifest.json
+ARG ARCH
+RUN sed -i "s/\"BUILDARCH\"/\"${ARCH}\"/" manifest.json
+
+# Cross-compile the Go binary for the target architecture
 RUN cd wireguard && \
-    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+    if [ "$ARCH" = "aarch64" ]; then \
+        export GOARCH=arm64; \
+    else \
+        export GOARCH=arm GOARM=7; \
+    fi && \
+    GOOS=linux CGO_ENABLED=0 \
     go build -ldflags="-s -w" -o ../lib/wireguard-userspace . && \
     chmod 755 ../lib/wireguard-userspace
 
