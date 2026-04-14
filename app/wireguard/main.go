@@ -7,7 +7,9 @@
 //
 // Network access model:
 //   - Transparent TCP port forwarding for common camera ports (80, 443, 554)
-//   - SOCKS5 proxy on port 1080 for full access to any camera port
+//   - SOCKS5 proxy on port 1080 for full access to any camera port (WireGuard peer → camera)
+//   - HTTP CONNECT proxy on port 8080 (set http://127.0.0.1:8080 in camera global proxy settings)
+//   - Outbound SOCKS5 on localhost:1080 — camera services (e.g. MQTT) → WireGuard → internet
 //
 // Config is read from CONFIG_FILE (written by the C ACAP bridge via axparameter).
 // Reloads on SIGUSR1 or when the config file modification time changes.
@@ -16,6 +18,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -24,6 +27,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -43,6 +47,15 @@ var transparentPorts = []int{80, 443, 554}
 
 // socks5Port is the SOCKS5 proxy port on the WireGuard interface.
 const socks5Port = 1080
+
+// httpProxyPort is the HTTP CONNECT proxy port on localhost.
+// Configure the camera's global proxy as http://127.0.0.1:8080.
+const httpProxyPort = 8080
+
+// outboundSOCKS5Port is the host-network SOCKS5 port for camera services that
+// need to route outbound connections through the WireGuard tunnel (e.g. MQTT).
+// Configure camera services to use SOCKS5 at 127.0.0.1:1080.
+const outboundSOCKS5Port = 1080
 
 // Config holds parsed WireGuard settings from the config file.
 type Config struct {
@@ -187,6 +200,17 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 	// SOCKS5 proxy for full access to any camera port
 	t.wg.Add(1)
 	go t.runSOCKS5(localAddr, socks5Port)
+
+	// HTTP CONNECT proxy on localhost so the camera can route its own outbound
+	// HTTP/HTTPS traffic through WireGuard via the global proxy setting.
+	t.wg.Add(1)
+	go t.runHTTPProxy(httpProxyPort)
+
+	// Outbound SOCKS5 on localhost so camera services (e.g. MQTT) can route
+	// connections through WireGuard. Configure those services to use
+	// SOCKS5 127.0.0.1:1080.
+	t.wg.Add(1)
+	go t.runOutboundSOCKS5(outboundSOCKS5Port)
 
 	return t, nil
 }
@@ -344,6 +368,261 @@ func handleSOCKS5(c net.Conn) {
 	<-done
 }
 
+// runHTTPProxy listens on 127.0.0.1:port (host network) and handles HTTP CONNECT
+// requests by tunnelling the connection through the WireGuard netstack. Plain
+// HTTP requests (non-CONNECT) are also forwarded. Set the camera's global proxy
+// to http://127.0.0.1:<port> to route outbound camera traffic through the VPN.
+func (t *tunnel) runHTTPProxy(port int) {
+	defer t.wg.Done()
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		slog.Error("http proxy listen", "port", port, "err", err)
+		return
+	}
+	go func() { <-t.stopCh; ln.Close() }()
+	slog.Info("HTTP CONNECT proxy ready", "addr", ln.Addr())
+
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			select {
+			case <-t.stopCh:
+				return
+			default:
+				slog.Error("http proxy accept", "err", err)
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+		go t.handleHTTPProxy(c)
+	}
+}
+
+// dialViaWG resolves hostport using the host OS DNS resolver, then connects to
+// the resulting IP through the WireGuard netstack so the traffic exits via VPN.
+func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return nil, err
+	}
+	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("no addresses resolved for %s", host)
+	}
+	return t.tnet.DialContext(ctx, "tcp", net.JoinHostPort(addrs[0], port))
+}
+
+// handleHTTPProxy serves one client connection from the HTTP CONNECT proxy.
+func (t *tunnel) handleHTTPProxy(c net.Conn) {
+	defer c.Close()
+	c.SetDeadline(time.Now().Add(30 * time.Second))
+
+	rd := bufio.NewReader(c)
+
+	// Read the request line: METHOD target HTTP/x.x
+	requestLine, err := rd.ReadString('\n')
+	if err != nil {
+		return
+	}
+	parts := strings.SplitN(strings.TrimSpace(requestLine), " ", 3)
+	if len(parts) != 3 {
+		return
+	}
+	method, target, httpVer := parts[0], parts[1], parts[2]
+
+	if strings.ToUpper(method) == "CONNECT" {
+		// HTTPS tunnel: drain headers, reply 200, then relay raw bytes.
+		for {
+			line, err := rd.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.TrimSpace(line) == "" {
+				break
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		upstream, err := t.dialViaWG(ctx, target)
+		cancel()
+		if err != nil {
+			fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
+			return
+		}
+		defer upstream.Close()
+
+		c.SetDeadline(time.Time{})
+		fmt.Fprintf(c, "%s 200 Connection established\r\n\r\n", httpVer)
+
+		done := make(chan struct{}, 2)
+		go func() { io.Copy(upstream, rd); done <- struct{}{} }()
+		go func() { io.Copy(c, upstream); done <- struct{}{} }()
+		<-done
+	} else {
+		// Plain HTTP: rewrite absolute URI to relative, forward to remote host.
+		u, err := url.Parse(target)
+		if err != nil {
+			fmt.Fprintf(c, "%s 400 Bad Request\r\n\r\n", httpVer)
+			return
+		}
+		host := u.Host
+		if !strings.Contains(host, ":") {
+			host += ":80"
+		}
+		relativePath := u.RequestURI()
+
+		// Collect headers so we can forward them verbatim.
+		var headerLines []string
+		for {
+			line, err := rd.ReadString('\n')
+			if err != nil {
+				return
+			}
+			headerLines = append(headerLines, line)
+			if strings.TrimSpace(line) == "" {
+				break
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		upstream, err := t.dialViaWG(ctx, host)
+		cancel()
+		if err != nil {
+			fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
+			return
+		}
+		defer upstream.Close()
+
+		c.SetDeadline(time.Time{})
+		fmt.Fprintf(upstream, "%s %s %s\r\n", method, relativePath, httpVer)
+		for _, h := range headerLines {
+			upstream.Write([]byte(h))
+		}
+
+		done := make(chan struct{}, 2)
+		go func() { io.Copy(upstream, rd); done <- struct{}{} }()
+		go func() { io.Copy(c, upstream); done <- struct{}{} }()
+		<-done
+	}
+}
+
+// runOutboundSOCKS5 listens on 127.0.0.1:port (host network) and handles SOCKS5
+// CONNECT requests by tunnelling the connection through the WireGuard netstack.
+// This is the "outbound" direction: camera services → SOCKS5 → WireGuard → internet.
+// Configure camera services (e.g. MQTT) to use SOCKS5 at 127.0.0.1:<port>.
+func (t *tunnel) runOutboundSOCKS5(port int) {
+	defer t.wg.Done()
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		slog.Error("outbound socks5 listen", "port", port, "err", err)
+		return
+	}
+	go func() { <-t.stopCh; ln.Close() }()
+	slog.Info("Outbound SOCKS5 proxy ready", "addr", ln.Addr())
+
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			select {
+			case <-t.stopCh:
+				return
+			default:
+				slog.Error("outbound socks5 accept", "err", err)
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+		go t.handleOutboundSOCKS5(c)
+	}
+}
+
+// handleOutboundSOCKS5 implements the SOCKS5 server-side handshake (RFC 1928)
+// and forwards the accepted connection to the real destination via WireGuard.
+func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
+	defer c.Close()
+	c.SetDeadline(time.Now().Add(30 * time.Second))
+
+	buf := make([]byte, 257)
+
+	// Greeting
+	if _, err := io.ReadFull(c, buf[:2]); err != nil {
+		return
+	}
+	if buf[0] != 0x05 {
+		return
+	}
+	nmethods := int(buf[1])
+	if _, err := io.ReadFull(c, buf[:nmethods]); err != nil {
+		return
+	}
+	c.Write([]byte{0x05, 0x00}) // no auth required
+
+	// Request
+	if _, err := io.ReadFull(c, buf[:4]); err != nil {
+		return
+	}
+	if buf[0] != 0x05 || buf[1] != 0x01 {
+		c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		return
+	}
+
+	var hostport string
+	switch buf[3] {
+	case 0x01: // IPv4
+		if _, err := io.ReadFull(c, buf[:6]); err != nil {
+			return
+		}
+		ip := net.IP(buf[:4]).String()
+		port := binary.BigEndian.Uint16(buf[4:6])
+		hostport = net.JoinHostPort(ip, fmt.Sprintf("%d", port))
+	case 0x03: // domain name
+		if _, err := io.ReadFull(c, buf[:1]); err != nil {
+			return
+		}
+		nameLen := int(buf[0])
+		if _, err := io.ReadFull(c, buf[:nameLen+2]); err != nil {
+			return
+		}
+		host := string(buf[:nameLen])
+		port := binary.BigEndian.Uint16(buf[nameLen : nameLen+2])
+		hostport = net.JoinHostPort(host, fmt.Sprintf("%d", port))
+	case 0x04: // IPv6
+		if _, err := io.ReadFull(c, buf[:18]); err != nil {
+			return
+		}
+		ip := net.IP(buf[:16]).String()
+		port := binary.BigEndian.Uint16(buf[16:18])
+		hostport = net.JoinHostPort(ip, fmt.Sprintf("%d", port))
+	default:
+		c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		return
+	}
+
+	c.SetDeadline(time.Time{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	upstream, err := t.dialViaWG(ctx, hostport)
+	cancel()
+	if err != nil {
+		c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		return
+	}
+	defer upstream.Close()
+
+	// Success
+	c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+
+	done := make(chan struct{}, 2)
+	go func() { io.Copy(upstream, c); done <- struct{}{} }()
+	go func() { io.Copy(c, upstream); done <- struct{}{} }()
+	<-done
+}
+
 func main() {
 	configPath := defaultConfigPath
 	if len(os.Args) > 1 {
@@ -435,5 +714,7 @@ func (a *appState) reload() {
 		"ip", cfg.ClientIP,
 		"endpoint", cfg.Endpoint,
 		"socks5_port", socks5Port,
+		"http_proxy_port", httpProxyPort,
+		"outbound_socks5_port", outboundSOCKS5Port,
 	)
 }

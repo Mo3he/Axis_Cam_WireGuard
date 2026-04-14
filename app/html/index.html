@@ -308,20 +308,14 @@
             <div class="info-value" id="d-endpoint">-</div>
         </div>
         <div class="info-item">
-            <div class="info-label">HTTP (port 80)</div>
-            <div class="info-value" id="d-http">-</div>
+            <div class="info-label">HTTP / HTTPS Proxy</div>
+            <div class="info-value" id="d-http">http://127.0.0.1:8080</div>
+            <div class="info-label" style="margin-top:6px;font-size:10px;">Set in System → Network → Global proxies</div>
         </div>
         <div class="info-item">
-            <div class="info-label">HTTPS (port 443)</div>
-            <div class="info-value" id="d-https">-</div>
-        </div>
-        <div class="info-item">
-            <div class="info-label">RTSP (port 554)</div>
-            <div class="info-value" id="d-rtsp">-</div>
-        </div>
-        <div class="info-item">
-            <div class="info-label">SOCKS5 Proxy</div>
-            <div class="info-value" id="d-socks">-</div>
+            <div class="info-label">SOCKS5 Proxy (MQTT etc.)</div>
+            <div class="info-value" id="d-socks">127.0.0.1:1080</div>
+            <div class="info-label" style="margin-top:6px;font-size:10px;">Set in each app/service proxy setting</div>
         </div>
     </div>
 </div>
@@ -466,10 +460,6 @@
         if (r.state === 'connected' && r.ip) {
             document.getElementById('d-clientip').textContent  = r.ip;
             document.getElementById('d-endpoint').textContent  = r.endpoint || '-';
-            document.getElementById('d-http').textContent      = r.ip + ':80';
-            document.getElementById('d-https').textContent     = r.ip + ':443';
-            document.getElementById('d-rtsp').textContent      = r.ip + ':554';
-            document.getElementById('d-socks').textContent     = r.ip + ':1080';
             info.style.display = '';
         } else {
             info.style.display = 'none';
