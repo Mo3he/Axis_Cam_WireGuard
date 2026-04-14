@@ -6,10 +6,6 @@ Current version: **1.2.4**
 
 Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
 
-### Disclaimer: This is an independent, community-developed ACAP package and is not an official Axis Communications product. It was developed entirely on personal time and is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com
-
-> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
-
 ## Overview
 
 Adding a VPN client directly to the camera allows secure remote access without requiring any other equipment or network configuration. WireGuard achieves this in a secure, simple, and lightweight way.
@@ -20,40 +16,6 @@ The app runs entirely in userspace using [wireguard-go](https://github.com/WireG
 - **Compatible with Axis OS 11 and 12** — OS 12 blocked root ACAP apps; this version works on both
 - **No kernel TUN device** — all networking is handled inside the process
 
-### What's new in 1.2.0
-
-- **Redesigned web UI** — configuration is now stored via the standard ACAP parameter store (`axparameter`) and exposed through the camera's built-in `/axis-cgi/param.cgi` — no embedded HTTP server in the tunnel process
-- **Import `.conf`** — paste or drop a standard WireGuard `.conf` file to populate all fields at once
-- **Live status & log panel** — connection state and service log shown directly on the settings page, auto-refreshed every 5 seconds
-
-## How it works
-
-Once connected, three proxy services start on the camera:
-
-| Service | Address | Purpose |
-|---|---|---|
-| **HTTP CONNECT proxy** | `http://127.0.0.1:8080` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
-| **Outbound SOCKS5** | `127.0.0.1:1080` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
-| **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
-
-Additionally, ports 80, 443, and 554 on the WireGuard IP are transparently forwarded to the camera's local services.
-
-### Routing outbound camera traffic through WireGuard
-
-**Global HTTP/HTTPS proxy** — set in **System → Network → Global proxies**:
-```
-HTTP proxy:  http://127.0.0.1:8080
-HTTPS proxy: http://127.0.0.1:8080
-```
-
-**Built-in MQTT client** — set in **System → MQTT → Broker**:
-```
-HTTP proxy:  http://127.0.0.1:8080
-HTTPS proxy: http://127.0.0.1:8080
-```
-
-**ACAP apps / services using SOCKS5** — set their proxy to `127.0.0.1:1080`.
-
 ## Compatibility
 
 Works on Axis cameras with ARM or aarch64 SoCs running **Axis OS 11.11 (LTS) or later**, including Axis OS 12.
@@ -62,7 +24,7 @@ To check your camera's architecture:
 
 ```sh
 curl --digest -u <username>:<password> \
-  http://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture
+  'http://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture'
 ```
 
 ## Installing
@@ -73,8 +35,8 @@ Download the pre-built `.eap` for your camera's architecture from the [latest re
 
 | Architecture | File |
 |---|---|
-| aarch64 (most cameras 2019+) | `WireGuard_VPN_1_2_0_aarch64.eap` |
-| armv7hf (older cameras) | `WireGuard_VPN_1_2_0_armv7hf.eap` |
+| aarch64 (most cameras 2019+) | `WireGuard_VPN_<version>_aarch64.eap` |
+| armv7hf (older cameras) | `WireGuard_VPN_<version>_armv7hf.eap` |
 
 ## Configuration
 
@@ -110,6 +72,34 @@ wg genkey | tee camera-private.key | wg pubkey > camera-public.key
 PublicKey = <camera-public.key contents>
 AllowedIPs = 10.0.0.2/32
 ```
+
+## How it works
+
+Once connected, three proxy services start on the camera:
+
+| Service | Address | Purpose |
+|---|---|---|
+| **HTTP CONNECT proxy** | `http://127.0.0.1:8080` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
+| **Outbound SOCKS5** | `127.0.0.1:1080` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
+| **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
+
+Additionally, ports 80, 443, and 554 on the WireGuard IP are transparently forwarded to the camera's local services.
+
+### Routing outbound camera traffic through WireGuard
+
+**Global HTTP/HTTPS proxy** — set in **System → Network → Global proxies**:
+```
+HTTP proxy:  http://127.0.0.1:8080
+HTTPS proxy: http://127.0.0.1:8080
+```
+
+**Built-in MQTT client** — set in **System → MQTT → Broker**:
+```
+HTTP proxy:  http://127.0.0.1:8080
+HTTPS proxy: http://127.0.0.1:8080
+```
+
+**ACAP apps / services using SOCKS5** — set their proxy to `127.0.0.1:1080`.
 
 ## Config API
 
@@ -182,3 +172,9 @@ This builds both architectures, copies the `.eap` files to the repo root, and cl
 
 - https://www.wireguard.com/
 - https://www.axis.com/
+
+---
+
+> **Disclaimer:** This is an independent, community-developed ACAP package and is not an official Axis Communications product. It was developed entirely on personal time and is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com
+
+> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
