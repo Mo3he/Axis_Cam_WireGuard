@@ -1,5 +1,9 @@
 # WireGuard VPN ACAP
 
+> **Disclaimer:** This is an independent, community-developed ACAP package and is not an official Axis Communications product. It was developed entirely on personal time and is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com
+
+> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
+
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP application.
 
 Current version: **1.2.4**
@@ -188,9 +192,3 @@ cd acap3 && ./build.sh
 
 - https://www.wireguard.com/
 - https://www.axis.com/
-
----
-
-> **Disclaimer:** This is an independent, community-developed ACAP package and is not an official Axis Communications product. It was developed entirely on personal time and is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com
-
-> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
