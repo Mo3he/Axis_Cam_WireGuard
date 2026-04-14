@@ -2,7 +2,7 @@
 
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP application.
 
-Current version: **1.2.0**
+Current version: **1.2.4**
 
 Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
 
@@ -28,10 +28,31 @@ The app runs entirely in userspace using [wireguard-go](https://github.com/WireG
 
 ## How it works
 
-Once connected, the camera is reachable from the WireGuard network via:
+Once connected, three proxy services start on the camera:
 
-- **Direct port forwarding** — ports 80 (HTTP), 443 (HTTPS), and 554 (RTSP) on the WireGuard IP are transparently forwarded to the camera's local services. Point your browser or RTSP client directly at the WireGuard IP.
-- **SOCKS5 proxy on port 1080** — configure any SOCKS5-aware client to use `<wireguard-ip>:1080` for access to any camera port.
+| Service | Address | Purpose |
+|---|---|---|
+| **HTTP CONNECT proxy** | `http://127.0.0.1:8080` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
+| **Outbound SOCKS5** | `127.0.0.1:1080` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
+| **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
+
+Additionally, ports 80, 443, and 554 on the WireGuard IP are transparently forwarded to the camera's local services.
+
+### Routing outbound camera traffic through WireGuard
+
+**Global HTTP/HTTPS proxy** — set in **System → Network → Global proxies**:
+```
+HTTP proxy:  http://127.0.0.1:8080
+HTTPS proxy: http://127.0.0.1:8080
+```
+
+**Built-in MQTT client** — set in **System → MQTT → Broker**:
+```
+HTTP proxy:  http://127.0.0.1:8080
+HTTPS proxy: http://127.0.0.1:8080
+```
+
+**ACAP apps / services using SOCKS5** — set their proxy to `127.0.0.1:1080`.
 
 ## Compatibility
 
@@ -88,6 +109,63 @@ wg genkey | tee camera-private.key | wg pubkey > camera-public.key
 [Peer]
 PublicKey = <camera-public.key contents>
 AllowedIPs = 10.0.0.2/32
+```
+
+## Config API
+
+The app exposes its configuration entirely through the standard VAPIX `param.cgi` endpoint — no custom API server required. Any HTTP client with camera credentials can read or write the config.
+
+### Read current config
+
+```sh
+curl --digest -u admin:password \
+  'http://<camera-ip>/axis-cgi/param.cgi?action=list&group=root.wireguardconfig'
+```
+
+Example response:
+```
+root.wireguardconfig.AllowedIPs=0.0.0.0/0
+root.wireguardconfig.ClientIP=10.0.0.2/24
+root.wireguardconfig.Endpoint=vpn.example.com:51820
+root.wireguardconfig.ListenPort=51820
+root.wireguardconfig.PeerPublicKey=<base64>
+root.wireguardconfig.PrivateKey=<base64>
+```
+
+### Push a new config
+
+```sh
+curl --digest -u admin:password \
+  --data-urlencode 'action=update' \
+  --data-urlencode 'root.wireguardconfig.PrivateKey=<base64-private-key>' \
+  --data-urlencode 'root.wireguardconfig.PeerPublicKey=<base64-peer-pubkey>' \
+  --data-urlencode 'root.wireguardconfig.Endpoint=vpn.example.com:51820' \
+  --data-urlencode 'root.wireguardconfig.ClientIP=10.0.0.2/24' \
+  --data-urlencode 'root.wireguardconfig.AllowedIPs=0.0.0.0/0' \
+  --data-urlencode 'root.wireguardconfig.ListenPort=51820' \
+  'http://<camera-ip>/axis-cgi/param.cgi'
+```
+
+The app watches for parameter changes and automatically applies the new config — no restart required. A successful update returns `OK`.
+
+### Push config from a `.conf` file (shell helper)
+
+```sh
+#!/bin/sh
+# Usage: ./push-config.sh vpn.conf <camera-ip> <username> <password>
+CONF=$1; CAM=$2; USER=$3; PASS=$4
+
+get() { grep -m1 "^\s*$1" "$CONF" | sed 's/.*= *//' | tr -d '\r'; }
+
+curl --digest -u "$USER:$PASS" \
+  --data-urlencode "action=update" \
+  --data-urlencode "root.wireguardconfig.PrivateKey=$(get PrivateKey)" \
+  --data-urlencode "root.wireguardconfig.PeerPublicKey=$(get PublicKey)" \
+  --data-urlencode "root.wireguardconfig.Endpoint=$(get Endpoint)" \
+  --data-urlencode "root.wireguardconfig.ClientIP=$(get Address)" \
+  --data-urlencode "root.wireguardconfig.AllowedIPs=$(get AllowedIPs)" \
+  --data-urlencode "root.wireguardconfig.ListenPort=$(get ListenPort)" \
+  "http://$CAM/axis-cgi/param.cgi"
 ```
 
 ## Building from source
