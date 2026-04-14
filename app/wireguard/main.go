@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"log/syslog"
 	"net"
 	"net/netip"
 	"net/url"
@@ -623,13 +624,59 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 	<-done
 }
 
+// multiHandler fans slog records out to stderr and (when available) syslog,
+// so that logs are visible both via systemd journal (ACAP 4) and via
+// systemlog.cgi (ACAP 3, where the init wrapper does not capture stderr).
+type multiHandler struct {
+	stderr *slog.TextHandler
+	sys    *syslog.Writer // nil if syslog unavailable
+}
+
+func newMultiHandler(w *os.File) *multiHandler {
+	h := &multiHandler{stderr: slog.NewTextHandler(w, nil)}
+	sw, err := syslog.New(syslog.LOG_USER|syslog.LOG_INFO, "wireguardconfig")
+	if err == nil {
+		h.sys = sw
+	}
+	return h
+}
+
+func (h *multiHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	return h.stderr.Enabled(ctx, l)
+}
+func (h *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h.stderr.WithAttrs(attrs)
+}
+func (h *multiHandler) WithGroup(name string) slog.Handler {
+	return h.stderr.WithGroup(name)
+}
+func (h *multiHandler) Handle(ctx context.Context, r slog.Record) error {
+	_ = h.stderr.Handle(ctx, r)
+	if h.sys != nil {
+		msg := r.Message
+		r.Attrs(func(a slog.Attr) bool {
+			msg += " " + a.Key + "=" + fmt.Sprint(a.Value.Any())
+			return true
+		})
+		switch {
+		case r.Level >= slog.LevelError:
+			_ = h.sys.Err(msg)
+		case r.Level >= slog.LevelWarn:
+			_ = h.sys.Warning(msg)
+		default:
+			_ = h.sys.Info(msg)
+		}
+	}
+	return nil
+}
+
 func main() {
 	configPath := defaultConfigPath
 	if len(os.Args) > 1 {
 		configPath = os.Args[1]
 	}
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	slog.SetDefault(slog.New(newMultiHandler(os.Stderr)))
 	slog.Info("wireguard-userspace starting", "config", configPath)
 
 	app := &appState{configPath: configPath}

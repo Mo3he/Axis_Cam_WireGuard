@@ -12,31 +12,41 @@ Adding a VPN client directly to the camera allows secure remote access without r
 
 The app runs entirely in userspace using [wireguard-go](https://github.com/WireGuard/wireguard-go) + [gVisor netstack](https://gvisor.dev/), which means:
 
-- **No root required** — runs as the standard unprivileged `sdk` ACAP user
-- **Compatible with Axis OS 11 and 12** — OS 12 blocked root ACAP apps; this version works on both
+- **No root required** — runs as the standard unprivileged `sdk` ACAP user (ACAP 4 builds)
+- **Compatible with Axis OS 9.x through 12** — see the Compatibility section below
 - **No kernel TUN device** — all networking is handled inside the process
 
 ## Compatibility
 
-Works on Axis cameras with ARM or aarch64 SoCs running **Axis OS 11.11 (LTS) or later**, including Axis OS 12.
+| SDK | Axis OS | Architecture | File |
+|---|---|---|---|
+| ACAP 4 native SDK | 11.11+ (incl. OS 12) | aarch64 | `WireGuard_VPN_1_2_4_aarch64.eap` |
+| ACAP 4 native SDK | 11.11+ (incl. OS 12) | armv7hf | `WireGuard_VPN_1_2_4_armv7hf.eap` |
+| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_4_armv7hf_acap3.eap` |
 
-To check your camera's architecture:
+The ACAP 3 build targets older cameras running Axis OS 9.x or 10.x (`EmbeddedDevelopment.Version=2.x`).
+
+To check your camera's OS version and architecture:
 
 ```sh
+curl --digest -u <username>:<password> \
+  'http://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.Firmware.Version'
+
 curl --digest -u <username>:<password> \
   'http://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture'
 ```
 
 ## Installing
 
-Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
+Download the `.eap` for your camera from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
 
 > **Note:** EAP files are not included in the repository. Always download from the [Releases](https://github.com/Mo3he/Axis_Cam_WireGuard/releases) page.
 
-| Architecture | File |
-|---|---|
-| aarch64 (most cameras 2019+) | `WireGuard_VPN_<version>_aarch64.eap` |
-| armv7hf (older cameras) | `WireGuard_VPN_<version>_armv7hf.eap` |
+| SDK | Architecture | File |
+|---|---|---|
+| ACAP 4 (OS 11.11+) | aarch64 | `WireGuard_VPN_<version>_aarch64.eap` |
+| ACAP 4 (OS 11.11+) | armv7hf | `WireGuard_VPN_<version>_armv7hf.eap` |
+| ACAP 3 (OS 9.x–10.x) | armv7hf | `WireGuard_VPN_<version>_armv7hf_acap3.eap` |
 
 ## Configuration
 
@@ -160,13 +170,19 @@ curl --digest -u "$USER:$PASS" \
 
 ## Building from source
 
-Requires Docker.
+Requires Docker. Two separate build scripts cover the two SDK generations.
+
+**ACAP 4 native SDK** (Axis OS 11.11+, aarch64 + armv7hf):
 
 ```sh
 ./build.sh
 ```
 
-This builds both architectures, copies the `.eap` files to the repo root, and cleans up temporary containers.
+**ACAP 3 SDK** (Axis OS 9.x – 10.x, armv7hf only):
+
+```sh
+cd acap3 && ./build.sh
+```
 
 ## Links
 
