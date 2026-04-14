@@ -426,27 +426,35 @@
 
     // ── Status parsing ─────────────────────────────────────────────────────
     function parseStatus(txt) {
-        // Extract most recent tunnel-up IP
-        var ipMatches = txt.match(/WireGuard tunnel up[^\n]*ip=(\S+)/g);
-        var ip = null;
-        if (ipMatches) {
-            var m = ipMatches[ipMatches.length - 1].match(/ip=(\S+)/);
-            if (m) ip = m[1].split('/')[0];
+        var lines = txt.split('\n');
+
+        // Find the index of the last significant tunnel event
+        var lastUpIdx   = -1;
+        var lastDownIdx = -1;
+        for (var i = 0; i < lines.length; i++) {
+            if (/WireGuard tunnel up/.test(lines[i]))              lastUpIdx   = i;
+            if (/shutting down|Deactivated successfully|acapctl.*stop/.test(lines[i])) lastDownIdx = i;
         }
-        // Extract most recent endpoint
-        var epMatches = txt.match(/WireGuard tunnel up[^\n]*endpoint=(\S+)/g);
-        var ep = null;
-        if (epMatches) {
-            var em = epMatches[epMatches.length - 1].match(/endpoint=(\S+)/);
+
+        // If we've never seen a tunnel-up, or the most recent event is a shutdown
+        var isUp = lastUpIdx > lastDownIdx && lastUpIdx !== -1;
+
+        var ip = null, ep = null;
+        if (isUp) {
+            var m = lines[lastUpIdx].match(/ip=(\S+)/);
+            if (m) ip = m[1].split('/')[0];
+            var em = lines[lastUpIdx].match(/endpoint=(\S+)/);
             if (em) ep = em[1];
         }
-        var isUp         = /WireGuard tunnel up/.test(txt);
+
+        var recentLines  = lines.slice(-20).join('\n');
         var isIncomplete = /config incomplete/.test(txt) && !isUp;
-        var hasError     = /level=ERROR/.test(txt.split('\n').slice(-20).join('\n'));
+        var hasError     = /level=ERROR/.test(recentLines);
+
         if (isUp)         return { state: 'connected',    ip: ip, endpoint: ep };
         if (isIncomplete) return { state: 'connecting',   ip: null, endpoint: null };
         if (hasError)     return { state: 'disconnected', ip: null, endpoint: null };
-        return              { state: 'connecting',   ip: null, endpoint: null };
+        return              { state: 'disconnected', ip: null, endpoint: null };
     }
 
     function renderStatus(r) {
