@@ -188,15 +188,6 @@ Requires Docker. Two separate build scripts cover the two SDK generations.
 cd acap3 && ./build.sh
 ```
 
-## Changelog
-
-### 1.2.5
-- **Fix:** Endpoint field now accepts hostnames (e.g. `vpn.example.com:51820`) — previously only IP addresses were accepted because the WireGuard UAPI requires a resolved IP. The hostname is now resolved before being passed to the tunnel.
-- **Fix:** UI no longer shows disconnected / clears connection details when the system log rotates. The last known connected state is now persisted across log rotations.
-
-### 1.2.4
-- Initial public release with ACAP 3 and ACAP 4 support.
-
 ## Links
 
 - https://www.wireguard.com/
