@@ -436,8 +436,8 @@
             if (/shutting down|Deactivated successfully|acapctl.*stop/.test(lines[i])) lastDownIdx = i;
         }
 
-        // If we've never seen a tunnel-up, or the most recent event is a shutdown
-        var isUp = lastUpIdx > lastDownIdx && lastUpIdx !== -1;
+        var isUp   = lastUpIdx > lastDownIdx && lastUpIdx !== -1;
+        var isDown = lastDownIdx > lastUpIdx  && lastDownIdx !== -1;
 
         var ip = null, ep = null;
         if (isUp) {
@@ -445,16 +445,28 @@
             if (m) ip = m[1].split('/')[0];
             var em = lines[lastUpIdx].match(/endpoint=(\S+)/);
             if (em) ep = em[1];
+            // Persist so status survives log rotation
+            try { localStorage.setItem('wg_cache', JSON.stringify({ ip: ip, ep: ep })); } catch(e) {}
+        } else if (isDown) {
+            try { localStorage.removeItem('wg_cache'); } catch(e) {}
         }
 
         var recentLines  = lines.slice(-20).join('\n');
         var isIncomplete = /config incomplete/.test(txt) && !isUp;
         var hasError     = /level=ERROR/.test(recentLines);
 
-        if (isUp)         return { state: 'connected',    ip: ip, endpoint: ep };
-        if (isIncomplete) return { state: 'connecting',   ip: null, endpoint: null };
-        if (hasError)     return { state: 'disconnected', ip: null, endpoint: null };
-        return              { state: 'disconnected', ip: null, endpoint: null };
+        if (isUp)         return { state: 'connected',  ip: ip, endpoint: ep };
+        if (isIncomplete) { try { localStorage.removeItem('wg_cache'); } catch(e) {} return { state: 'connecting',   ip: null, endpoint: null }; }
+        if (hasError)     { try { localStorage.removeItem('wg_cache'); } catch(e) {} return { state: 'disconnected', ip: null, endpoint: null }; }
+        if (isDown)       return { state: 'disconnected', ip: null, endpoint: null };
+
+        // Log rotated — no definitive event in current log; use cached state if available
+        try {
+            var cached = JSON.parse(localStorage.getItem('wg_cache') || 'null');
+            if (cached) return { state: 'connected', ip: cached.ip, endpoint: cached.ep };
+        } catch(e) {}
+
+        return { state: 'disconnected', ip: null, endpoint: null };
     }
 
     function renderStatus(r) {

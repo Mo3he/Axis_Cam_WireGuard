@@ -137,7 +137,23 @@ func buildUAPI(cfg *Config) (string, error) {
 	fmt.Fprintf(&sb, "public_key=%s\n", peerHex)
 	fmt.Fprintf(&sb, "allowed_ip=%s\n", cfg.AllowedIPs)
 	if cfg.Endpoint != "" {
-		fmt.Fprintf(&sb, "endpoint=%s\n", cfg.Endpoint)
+		// The WireGuard UAPI requires an IP:port endpoint, not a hostname.
+		// Resolve the hostname here so that DNS names are accepted.
+		host, port, err := net.SplitHostPort(cfg.Endpoint)
+		if err != nil {
+			return "", fmt.Errorf("invalid endpoint %q: %w", cfg.Endpoint, err)
+		}
+		if net.ParseIP(host) == nil {
+			addrs, err := net.LookupHost(host)
+			if err != nil {
+				return "", fmt.Errorf("resolve endpoint hostname %q: %w", host, err)
+			}
+			if len(addrs) == 0 {
+				return "", fmt.Errorf("no addresses for endpoint hostname %q", host)
+			}
+			host = addrs[0]
+		}
+		fmt.Fprintf(&sb, "endpoint=%s\n", net.JoinHostPort(host, port))
 	}
 	fmt.Fprintf(&sb, "persistent_keepalive_interval=25\n")
 	return sb.String(), nil
