@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO_ROOT=$(realpath "${0%/*}")
+REPO_ROOT=$(cd -P "$(dirname "$0")" && pwd)
 
 for ARCH in aarch64 armv7hf; do
     echo "==> Building ${ARCH}..."
