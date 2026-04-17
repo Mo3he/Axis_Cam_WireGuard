@@ -22,7 +22,7 @@ COPY LICENSE /opt/app/LICENSE
 WORKDIR /opt/app
 
 # Patch the version placeholder in package.conf
-ARG ACAP_VERSION=1.2.4
+ARG ACAP_VERSION=1.2.8
 RUN sed -i "s/VERSION=BUILDVER/VERSION=${ACAP_VERSION}/" package.conf
 
 # ACAP 3 firmware expects the settings page at the app root, not in html/

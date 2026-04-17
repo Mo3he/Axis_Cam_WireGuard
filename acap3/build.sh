@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"   # acap3/
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"   # repo root
 
-VERSION="1.2.7"
+VERSION="1.2.8"
 
 echo "==> Building ACAP 3 armv7hf (for Axis OS 9.x / 10.x cameras)..."
 docker build \

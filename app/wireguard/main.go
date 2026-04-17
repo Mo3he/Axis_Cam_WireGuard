@@ -174,23 +174,16 @@ func (t *tunnel) close() {
 	t.dev.Close()
 }
 
-// portCandidates builds a list of ports to try, starting from the user's
-// configured port (parsed from a string).  Falls back to fallbackStart if
-// the string is empty or not a valid number.  n consecutive ports are
-// returned so there are always fallbacks in case of transient conflicts.
-func portCandidates(configured string, fallbackStart int, n int) []int {
-	start := fallbackStart
+// parsePort returns the port number from a string config value.
+// Falls back to defaultPort if the string is empty or not a valid port number.
+func parsePort(configured string, defaultPort int) int {
 	if configured != "" {
 		var p int
 		if _, err := fmt.Sscan(configured, &p); err == nil && p > 0 && p < 65536 {
-			start = p
+			return p
 		}
 	}
-	out := make([]int, n)
-	for i := range out {
-		out[i] = start + i
-	}
-	return out
+	return defaultPort
 }
 
 func startTunnel(cfg *Config) (*tunnel, error) {
@@ -228,12 +221,8 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 
 	t := &tunnel{dev: dev, tnet: tnet, stopCh: make(chan struct{})}
 
-	// Build port candidate lists starting from the user-configured port.
-	// If that port is busy (e.g. another ACAP) the next 3 are tried as a
-	// fallback, but the user can always avoid the conflict by picking a
-	// different port in the settings.
-	httpCandidates := portCandidates(cfg.HTTPProxyPort, 8080, 4)
-	socks5Candidates := portCandidates(cfg.OutboundSOCKS5Port, 1080, 4)
+	httpPort := parsePort(cfg.HTTPProxyPort, 8080)
+	socks5OutPort := parsePort(cfg.OutboundSOCKS5Port, 1080)
 
 	// Handshake monitor: polls WireGuard peer state every 15 s and logs
 	// "WireGuard handshake ok" / "WireGuard handshake lost" so the UI can
@@ -255,13 +244,13 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 	// HTTP CONNECT proxy on localhost so the camera can route its own outbound
 	// HTTP/HTTPS traffic through WireGuard via the global proxy setting.
 	t.wg.Add(1)
-	go t.runHTTPProxy(httpCandidates)
+	go t.runHTTPProxy(httpPort)
 
 	// Outbound SOCKS5 on localhost so camera services (e.g. MQTT) can route
 	// connections through WireGuard. Configure those services to use
-	// SOCKS5 127.0.0.1:<port> (first free port from candidates).
+	// SOCKS5 127.0.0.1:<port>.
 	t.wg.Add(1)
-	go t.runOutboundSOCKS5(socks5Candidates)
+	go t.runOutboundSOCKS5(socks5OutPort)
 
 	return t, nil
 }
@@ -480,20 +469,12 @@ func handleSOCKS5(c net.Conn) {
 // requests by tunnelling the connection through the WireGuard netstack. Plain
 // HTTP requests (non-CONNECT) are also forwarded. Set the camera's global proxy
 // to http://127.0.0.1:<port> to route outbound camera traffic through the VPN.
-func (t *tunnel) runHTTPProxy(candidates []int) {
+func (t *tunnel) runHTTPProxy(port int) {
 	defer t.wg.Done()
 
-	var ln net.Listener
-	for _, port := range candidates {
-		var err error
-		ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-		if err == nil {
-			break
-		}
-		slog.Warn("http proxy port unavailable, trying next", "port", port, "err", err)
-	}
-	if ln == nil {
-		slog.Error("http proxy listen", "candidates", candidates, "err", "all ports in use")
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		slog.Error("http proxy listen failed — port is in use, change HTTPProxyPort in settings", "port", port, "err", err)
 		return
 	}
 	go func() { <-t.stopCh; ln.Close() }()
@@ -630,20 +611,12 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 // CONNECT requests by tunnelling the connection through the WireGuard netstack.
 // This is the "outbound" direction: camera services → SOCKS5 → WireGuard → internet.
 // Configure camera services (e.g. MQTT) to use SOCKS5 at 127.0.0.1:<port>.
-func (t *tunnel) runOutboundSOCKS5(candidates []int) {
+func (t *tunnel) runOutboundSOCKS5(port int) {
 	defer t.wg.Done()
 
-	var ln net.Listener
-	for _, port := range candidates {
-		var err error
-		ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-		if err == nil {
-			break
-		}
-		slog.Warn("outbound socks5 port unavailable, trying next", "port", port, "err", err)
-	}
-	if ln == nil {
-		slog.Error("outbound socks5 listen", "candidates", candidates, "err", "all ports in use")
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		slog.Error("outbound socks5 listen failed — port is in use, change OutboundSOCKS5Port in settings", "port", port, "err", err)
 		return
 	}
 	go func() { <-t.stopCh; ln.Close() }()
