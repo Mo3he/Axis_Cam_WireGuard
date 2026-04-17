@@ -352,12 +352,12 @@
         </div>
         <div class="info-item">
             <div class="info-label">HTTP / HTTPS Proxy</div>
-            <div class="info-value" id="d-http">http://127.0.0.1:8080</div>
+            <div class="info-value" id="d-http">—</div>
             <div class="info-label" style="margin-top:6px;font-size:10px;">Set in System → Network → Global proxies</div>
         </div>
         <div class="info-item">
             <div class="info-label">SOCKS5 Proxy (MQTT etc.)</div>
-            <div class="info-value" id="d-socks">127.0.0.1:1080</div>
+            <div class="info-value" id="d-socks">—</div>
             <div class="info-label" style="margin-top:6px;font-size:10px;">Set in each app/service proxy setting</div>
         </div>
     </div>
@@ -615,8 +615,12 @@
         if (r.state === 'connected' && r.ip) {
             document.getElementById('d-clientip').textContent  = r.ip;
             document.getElementById('d-endpoint').textContent  = r.endpoint || '-';
-            if (r.httpProxy)   document.getElementById('d-http').textContent  = 'http://' + r.httpProxy;
-            if (r.socks5Proxy) document.getElementById('d-socks').textContent = r.socks5Proxy;
+            // Use actual bound address from log if available; fall back to the
+            // user-configured port (already populated from ACAP params by loadConfig).
+            var httpPort   = (document.getElementById('f-httpproxyport').value || '8080').trim();
+            var socks5Port = (document.getElementById('f-socks5port').value    || '1080').trim();
+            document.getElementById('d-http').textContent  = 'http://127.0.0.1:' + (r.httpProxy  ? r.httpProxy.split(':').pop()  : httpPort);
+            document.getElementById('d-socks').textContent = r.socks5Proxy ? r.socks5Proxy : ('127.0.0.1:' + socks5Port);
             info.style.display = '';
         } else {
             info.style.display = 'none';
