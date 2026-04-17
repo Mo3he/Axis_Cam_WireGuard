@@ -4,15 +4,15 @@ A WireGuard VPN client that runs directly on Axis cameras as an ACAP application
 
 Current version: **1.2.8**
 
-Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
-
-[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mo3he)
-
 The app runs entirely in userspace using [wireguard-go](https://github.com/WireGuard/wireguard-go) + [gVisor netstack](https://gvisor.dev/), which means:
 
 - **No root required** — runs as the standard unprivileged `sdk` ACAP user (ACAP 4 builds)
 - **Compatible with Axis OS 9.x through 12** — see the Compatibility section below
 - **No kernel TUN device** — all networking is handled inside the process
+
+Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
+
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mo3he)
 
 > **Disclaimer:** This is an independent, community-developed ACAP package and is not an official Axis Communications product. It is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com 
 
