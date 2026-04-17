@@ -1,7 +1,7 @@
 PROGS     = wireguardconfig
 SRCS      = config_updater.c
 OBJS      = $(SRCS:.c=.o)
-
+STRIP    ?= strip
 PKGS = glib-2.0 gio-2.0 axparameter
 
 CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(PKGS))
@@ -15,6 +15,7 @@ CFLAGS += -Wall \
           -Werror
 
 all: $(PROGS)
+	$(STRIP) $(PROGS)
 
 $(PROGS): $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
