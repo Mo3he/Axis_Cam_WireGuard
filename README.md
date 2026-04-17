@@ -8,15 +8,15 @@ Download the pre-built `.eap` for your camera's architecture from the [latest re
 
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mo3he)
 
-> **Disclaimer:** This is an independent, community-developed ACAP package and is not an official Axis Communications product. It is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com 
-
-> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
-
 The app runs entirely in userspace using [wireguard-go](https://github.com/WireGuard/wireguard-go) + [gVisor netstack](https://gvisor.dev/), which means:
 
 - **No root required** — runs as the standard unprivileged `sdk` ACAP user (ACAP 4 builds)
 - **Compatible with Axis OS 9.x through 12** — see the Compatibility section below
 - **No kernel TUN device** — all networking is handled inside the process
+
+> **Disclaimer:** This is an independent, community-developed ACAP package and is not an official Axis Communications product. It is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com 
+
+> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
 
 ## Compatibility
 
