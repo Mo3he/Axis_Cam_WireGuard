@@ -2,7 +2,7 @@
 
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP application.
 
-Current version: **1.2.6**
+Current version: **1.2.7**
 
 Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
 
@@ -24,9 +24,9 @@ The app runs entirely in userspace using [wireguard-go](https://github.com/WireG
 
 | SDK | Axis OS | Architecture | File |
 |---|---|---|---|
-| ACAP 4 native SDK | 11.11+ (incl. OS 12) | aarch64 | `WireGuard_VPN_1_2_6_aarch64.eap` |
-| ACAP 4 native SDK | 11.11+ (incl. OS 12) | armv7hf | `WireGuard_VPN_1_2_6_armv7hf.eap` |
-| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_6_armv7hf_acap3.eap` |
+| ACAP 4 native SDK | 11.11+ (incl. OS 12) | aarch64 | `WireGuard_VPN_1_2_7_aarch64.eap` |
+| ACAP 4 native SDK | 11.11+ (incl. OS 12) | armv7hf | `WireGuard_VPN_1_2_7_armv7hf.eap` |
+| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_7_armv7hf_acap3.eap` |
 
 The ACAP 3 build targets older cameras running Axis OS 9.x or 10.x (`EmbeddedDevelopment.Version=2.x`).
 

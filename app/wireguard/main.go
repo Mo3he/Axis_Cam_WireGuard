@@ -49,22 +49,16 @@ var transparentPorts = []int{80, 443, 554}
 // socks5Port is the SOCKS5 proxy port on the WireGuard interface (not host network).
 const socks5Port = 1080
 
-// httpProxyCandidates are tried in order for the HTTP CONNECT proxy on localhost.
-// The first port not already in use is selected.
-var httpProxyCandidates = []int{8080, 8081, 8082, 8083}
-
-// outboundSOCKS5Candidates are tried in order for the outbound SOCKS5 proxy on localhost.
-// The first port not already in use is selected.
-var outboundSOCKS5Candidates = []int{1080, 1081, 1082, 1083}
-
 // Config holds parsed WireGuard settings from the config file.
 type Config struct {
-	PrivateKey string
-	ListenPort string
-	Endpoint   string
-	PeerPubKey string
-	AllowedIPs string
-	ClientIP   string
+	PrivateKey          string
+	ListenPort          string
+	Endpoint            string
+	PeerPubKey          string
+	AllowedIPs          string
+	ClientIP            string
+	HTTPProxyPort       string
+	OutboundSOCKS5Port  string
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -75,8 +69,10 @@ func loadConfig(path string) (*Config, error) {
 	defer f.Close()
 
 	cfg := &Config{
-		AllowedIPs: "0.0.0.0/0",
-		ClientIP:   "10.0.0.2/24",
+		AllowedIPs:         "0.0.0.0/0",
+		ClientIP:           "10.0.0.2/24",
+		HTTPProxyPort:      "8080",
+		OutboundSOCKS5Port: "1080",
 	}
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -103,6 +99,10 @@ func loadConfig(path string) (*Config, error) {
 			cfg.AllowedIPs = val
 		case "client_ip":
 			cfg.ClientIP = val
+		case "http_proxy_port":
+			cfg.HTTPProxyPort = val
+		case "outbound_socks5_port":
+			cfg.OutboundSOCKS5Port = val
 		}
 	}
 	return cfg, scanner.Err()
@@ -174,6 +174,25 @@ func (t *tunnel) close() {
 	t.dev.Close()
 }
 
+// portCandidates builds a list of ports to try, starting from the user's
+// configured port (parsed from a string).  Falls back to fallbackStart if
+// the string is empty or not a valid number.  n consecutive ports are
+// returned so there are always fallbacks in case of transient conflicts.
+func portCandidates(configured string, fallbackStart int, n int) []int {
+	start := fallbackStart
+	if configured != "" {
+		var p int
+		if _, err := fmt.Sscan(configured, &p); err == nil && p > 0 && p < 65536 {
+			start = p
+		}
+	}
+	out := make([]int, n)
+	for i := range out {
+		out[i] = start + i
+	}
+	return out
+}
+
 func startTunnel(cfg *Config) (*tunnel, error) {
 	prefix, err := netip.ParsePrefix(cfg.ClientIP)
 	if err != nil {
@@ -209,6 +228,13 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 
 	t := &tunnel{dev: dev, tnet: tnet, stopCh: make(chan struct{})}
 
+	// Build port candidate lists starting from the user-configured port.
+	// If that port is busy (e.g. another ACAP) the next 3 are tried as a
+	// fallback, but the user can always avoid the conflict by picking a
+	// different port in the settings.
+	httpCandidates := portCandidates(cfg.HTTPProxyPort, 8080, 4)
+	socks5Candidates := portCandidates(cfg.OutboundSOCKS5Port, 1080, 4)
+
 	// Handshake monitor: polls WireGuard peer state every 15 s and logs
 	// "WireGuard handshake ok" / "WireGuard handshake lost" so the UI can
 	// show true connected/disconnected status based on cryptographic proof,
@@ -229,13 +255,13 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 	// HTTP CONNECT proxy on localhost so the camera can route its own outbound
 	// HTTP/HTTPS traffic through WireGuard via the global proxy setting.
 	t.wg.Add(1)
-	go t.runHTTPProxy(httpProxyCandidates)
+	go t.runHTTPProxy(httpCandidates)
 
 	// Outbound SOCKS5 on localhost so camera services (e.g. MQTT) can route
 	// connections through WireGuard. Configure those services to use
 	// SOCKS5 127.0.0.1:<port> (first free port from candidates).
 	t.wg.Add(1)
-	go t.runOutboundSOCKS5(outboundSOCKS5Candidates)
+	go t.runOutboundSOCKS5(socks5Candidates)
 
 	return t, nil
 }
@@ -858,7 +884,7 @@ func (a *appState) reload() {
 		"ip", cfg.ClientIP,
 		"endpoint", cfg.Endpoint,
 		"socks5_port", socks5Port,
-		"http_proxy_candidates", httpProxyCandidates,
-		"outbound_socks5_candidates", outboundSOCKS5Candidates,
+		"http_proxy_port", cfg.HTTPProxyPort,
+		"outbound_socks5_port", cfg.OutboundSOCKS5Port,
 	)
 }

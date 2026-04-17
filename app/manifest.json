@@ -8,7 +8,7 @@
             "embeddedSdkVersion": "3.0",
             "vendorUrl": "https://github.com/Mo3he/Axis_Cam_WireGuard",
             "runMode": "respawn",
-            "version": "1.2.6",
+            "version": "1.2.7",
             "user": {
                 "group": "sdk",
                 "username": "sdk"
@@ -22,8 +22,10 @@
                 {"name": "ListenPort",    "default": "51820",       "type": "string"},
                 {"name": "Endpoint",      "default": "",            "type": "string"},
                 {"name": "PeerPublicKey", "default": "",            "type": "string"},
-                {"name": "AllowedIPs",    "default": "0.0.0.0/0",  "type": "string"},
-                {"name": "ClientIP",      "default": "10.0.0.2/24","type": "string"}
+                {"name": "AllowedIPs",         "default": "0.0.0.0/0",  "type": "string"},
+                {"name": "ClientIP",             "default": "10.0.0.2/24","type": "string"},
+                {"name": "HTTPProxyPort",        "default": "8080",        "type": "string"},
+                {"name": "OutboundSOCKS5Port",   "default": "1080",        "type": "string"}
             ]
         }
     }

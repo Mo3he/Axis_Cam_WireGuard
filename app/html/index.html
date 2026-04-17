@@ -310,6 +310,16 @@
             <input type="text" id="f-allowedips" placeholder="0.0.0.0/0" autocomplete="off" spellcheck="false"/>
         </div>
     </div>
+    <div class="field-grid">
+        <div class="field">
+            <label>HTTP Proxy Port <span style="font-weight:400;opacity:0.7">(for camera global proxy)</span></label>
+            <input type="text" id="f-httpproxyport" placeholder="8080" autocomplete="off" spellcheck="false"/>
+        </div>
+        <div class="field">
+            <label>Outbound SOCKS5 Port <span style="font-weight:400;opacity:0.7">(for MQTT etc.)</span></label>
+            <input type="text" id="f-socks5port" placeholder="1080" autocomplete="off" spellcheck="false"/>
+        </div>
+    </div>
     <div class="btn-row" style="margin-top:14px;">
         <button class="btn" id="save-btn">Save</button>
         <button class="btn btn-secondary" id="gen-btn" type="button">Generate Keys</button>
@@ -636,6 +646,8 @@
             document.getElementById('f-peerpubkey').value  = getParam('PeerPublicKey');
             document.getElementById('f-allowedips').value  = getParam('AllowedIPs');
             document.getElementById('f-clientip').value    = getParam('ClientIP');
+            document.getElementById('f-httpproxyport').value = getParam('HTTPProxyPort') || '8080';
+            document.getElementById('f-socks5port').value    = getParam('OutboundSOCKS5Port') || '1080';
             updatePubkeyDisplay();
         })
         .catch(function() {});
@@ -669,8 +681,10 @@
             'root.' + APP + '.ListenPort='    + encodeURIComponent(document.getElementById('f-listenport').value.trim()),
             'root.' + APP + '.Endpoint='      + encodeURIComponent(document.getElementById('f-endpoint').value.trim()),
             'root.' + APP + '.PeerPublicKey=' + encodeURIComponent(document.getElementById('f-peerpubkey').value.trim()),
-            'root.' + APP + '.AllowedIPs='    + encodeURIComponent(document.getElementById('f-allowedips').value.trim()),
-            'root.' + APP + '.ClientIP='      + encodeURIComponent(document.getElementById('f-clientip').value.trim())
+            'root.' + APP + '.AllowedIPs='           + encodeURIComponent(document.getElementById('f-allowedips').value.trim()),
+            'root.' + APP + '.ClientIP='              + encodeURIComponent(document.getElementById('f-clientip').value.trim()),
+            'root.' + APP + '.HTTPProxyPort='         + encodeURIComponent(document.getElementById('f-httpproxyport').value.trim() || '8080'),
+            'root.' + APP + '.OutboundSOCKS5Port='    + encodeURIComponent(document.getElementById('f-socks5port').value.trim() || '1080')
         ].join('&');
 
         fetch(PARAM_URL, {

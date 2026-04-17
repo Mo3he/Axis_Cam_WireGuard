@@ -40,12 +40,14 @@ static guint reload_timer_id = 0;
 
 /* ── cached config (updated in-place from callback value args) ─────────────── */
 
-static char *cfg_private_key  = NULL;
-static char *cfg_listen_port  = NULL;
-static char *cfg_endpoint     = NULL;
-static char *cfg_peer_pub_key = NULL;
-static char *cfg_allowed_ips  = NULL;
-static char *cfg_client_ip    = NULL;
+static char *cfg_private_key      = NULL;
+static char *cfg_listen_port      = NULL;
+static char *cfg_endpoint         = NULL;
+static char *cfg_peer_pub_key     = NULL;
+static char *cfg_allowed_ips      = NULL;
+static char *cfg_client_ip        = NULL;
+static char *cfg_http_proxy_port  = NULL;
+static char *cfg_socks5_port      = NULL;
 
 static void cache_set(char **field, const char *value) {
     if (!value) return;   /* NULL → keep existing cached value */
@@ -132,12 +134,14 @@ static void load_config_cache(AXParameter *handle) {
         if (error) { g_error_free(error); error = NULL; } \
     }
 
-    LOAD("PrivateKey",    cfg_private_key)
-    LOAD("ListenPort",    cfg_listen_port)
-    LOAD("Endpoint",      cfg_endpoint)
-    LOAD("PeerPublicKey", cfg_peer_pub_key)
-    LOAD("AllowedIPs",    cfg_allowed_ips)
-    LOAD("ClientIP",      cfg_client_ip)
+    LOAD("PrivateKey",         cfg_private_key)
+    LOAD("ListenPort",         cfg_listen_port)
+    LOAD("Endpoint",           cfg_endpoint)
+    LOAD("PeerPublicKey",      cfg_peer_pub_key)
+    LOAD("AllowedIPs",         cfg_allowed_ips)
+    LOAD("ClientIP",           cfg_client_ip)
+    LOAD("HTTPProxyPort",      cfg_http_proxy_port)
+    LOAD("OutboundSOCKS5Port", cfg_socks5_port)
 #undef LOAD
 }
 
@@ -147,12 +151,14 @@ static void write_config_file(void) {
         syslog(LOG_ERR, "cannot open config file: %s", strerror(errno));
         return;
     }
-    fprintf(f, "private_key=%s\n",     cache_get(&cfg_private_key,  ""));
-    fprintf(f, "listen_port=%s\n",     cache_get(&cfg_listen_port,  "51820"));
-    fprintf(f, "endpoint=%s\n",        cache_get(&cfg_endpoint,     ""));
-    fprintf(f, "peer_public_key=%s\n", cache_get(&cfg_peer_pub_key, ""));
-    fprintf(f, "allowed_ips=%s\n",     cache_get(&cfg_allowed_ips,  "0.0.0.0/0"));
-    fprintf(f, "client_ip=%s\n",       cache_get(&cfg_client_ip,    "10.0.0.2/24"));
+    fprintf(f, "private_key=%s\n",         cache_get(&cfg_private_key,  ""));
+    fprintf(f, "listen_port=%s\n",         cache_get(&cfg_listen_port,  "51820"));
+    fprintf(f, "endpoint=%s\n",            cache_get(&cfg_endpoint,     ""));
+    fprintf(f, "peer_public_key=%s\n",     cache_get(&cfg_peer_pub_key, ""));
+    fprintf(f, "allowed_ips=%s\n",         cache_get(&cfg_allowed_ips,  "0.0.0.0/0"));
+    fprintf(f, "client_ip=%s\n",           cache_get(&cfg_client_ip,    "10.0.0.2/24"));
+    fprintf(f, "http_proxy_port=%s\n",     cache_get(&cfg_http_proxy_port, "8080"));
+    fprintf(f, "outbound_socks5_port=%s\n",cache_get(&cfg_socks5_port,  "1080"));
     fclose(f);
     chmod(CONFIG_FILE, 0600);
     syslog(LOG_INFO, "config updated (endpoint=%s)",
@@ -194,12 +200,14 @@ static void parameter_changed(const gchar *name, const gchar *value,
            short_name, value ? value : "(null)", name);
 
     /* Cache the new value from the callback argument if non-NULL. */
-    if      (strcmp(short_name, "PrivateKey")    == 0) cache_set(&cfg_private_key,  value);
-    else if (strcmp(short_name, "ListenPort")    == 0) cache_set(&cfg_listen_port,  value);
-    else if (strcmp(short_name, "Endpoint")      == 0) cache_set(&cfg_endpoint,     value);
-    else if (strcmp(short_name, "PeerPublicKey") == 0) cache_set(&cfg_peer_pub_key, value);
-    else if (strcmp(short_name, "AllowedIPs")    == 0) cache_set(&cfg_allowed_ips,  value);
-    else if (strcmp(short_name, "ClientIP")      == 0) cache_set(&cfg_client_ip,    value);
+    if      (strcmp(short_name, "PrivateKey")         == 0) cache_set(&cfg_private_key,      value);
+    else if (strcmp(short_name, "ListenPort")         == 0) cache_set(&cfg_listen_port,      value);
+    else if (strcmp(short_name, "Endpoint")           == 0) cache_set(&cfg_endpoint,         value);
+    else if (strcmp(short_name, "PeerPublicKey")      == 0) cache_set(&cfg_peer_pub_key,     value);
+    else if (strcmp(short_name, "AllowedIPs")         == 0) cache_set(&cfg_allowed_ips,      value);
+    else if (strcmp(short_name, "ClientIP")           == 0) cache_set(&cfg_client_ip,        value);
+    else if (strcmp(short_name, "HTTPProxyPort")      == 0) cache_set(&cfg_http_proxy_port,  value);
+    else if (strcmp(short_name, "OutboundSOCKS5Port") == 0) cache_set(&cfg_socks5_port,      value);
     else syslog(LOG_WARNING, "unknown parameter: %s (raw: %s)", short_name, name);
 
     /* Coalesce all 6 saves into one restart 300 ms after the last change. */
@@ -240,7 +248,8 @@ int main(void) {
 
     const char *params[] = {
         "PrivateKey", "ListenPort", "Endpoint",
-        "PeerPublicKey", "AllowedIPs", "ClientIP"
+        "PeerPublicKey", "AllowedIPs", "ClientIP",
+        "HTTPProxyPort", "OutboundSOCKS5Port"
     };
     for (size_t i = 0; i < sizeof(params) / sizeof(params[0]); i++) {
         if (!ax_parameter_register_callback(handle, params[i],
