@@ -2,7 +2,7 @@
 
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP application.
 
-Current version: **1.2.5**
+Current version: **1.2.6**
 
 Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
 
@@ -24,9 +24,9 @@ The app runs entirely in userspace using [wireguard-go](https://github.com/WireG
 
 | SDK | Axis OS | Architecture | File |
 |---|---|---|---|
-| ACAP 4 native SDK | 11.11+ (incl. OS 12) | aarch64 | `WireGuard_VPN_1_2_5_aarch64.eap` |
-| ACAP 4 native SDK | 11.11+ (incl. OS 12) | armv7hf | `WireGuard_VPN_1_2_5_armv7hf.eap` |
-| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_5_armv7hf_acap3.eap` |
+| ACAP 4 native SDK | 11.11+ (incl. OS 12) | aarch64 | `WireGuard_VPN_1_2_6_aarch64.eap` |
+| ACAP 4 native SDK | 11.11+ (incl. OS 12) | armv7hf | `WireGuard_VPN_1_2_6_armv7hf.eap` |
+| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_6_armv7hf_acap3.eap` |
 
 The ACAP 3 build targets older cameras running Axis OS 9.x or 10.x (`EmbeddedDevelopment.Version=2.x`).
 
@@ -91,13 +91,17 @@ AllowedIPs = 10.0.0.2/32
 
 Once connected, three proxy services start on the camera:
 
-| Service | Address | Purpose |
+| Service | Default address | Purpose |
 |---|---|---|
 | **HTTP CONNECT proxy** | `http://127.0.0.1:8080` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
 | **Outbound SOCKS5** | `127.0.0.1:1080` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
 | **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
 
-Additionally, ports 80, 443, and 554 on the WireGuard IP are transparently forwarded to the camera's local services.
+> **Port conflict handling:** If `8080` or `1080` are already in use by another application (e.g. another VPN ACAP), the app automatically tries the next port (`8081`, `8082`… or `1081`, `1082`…). The actual bound addresses are shown in the connection details panel in the UI.
+
+### Saving config
+
+Click **Save** in the UI — the app stops the tunnel, applies the new config, and restarts within a few seconds. All six fields are saved as a single operation so only one restart occurs.
 
 ### Routing outbound camera traffic through WireGuard
 
