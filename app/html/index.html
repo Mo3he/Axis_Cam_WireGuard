@@ -312,11 +312,11 @@
     </div>
     <div class="field-grid">
         <div class="field">
-            <label>HTTP Proxy Port <span style="font-weight:400;opacity:0.7">(for camera global proxy)</span></label>
+            <label>HTTP Proxy Port <span style="font-weight:400;opacity:0.7">(global proxy &amp; MQTT)</span></label>
             <input type="text" id="f-httpproxyport" placeholder="8080" autocomplete="off" spellcheck="false"/>
         </div>
         <div class="field">
-            <label>Outbound SOCKS5 Port <span style="font-weight:400;opacity:0.7">(for MQTT etc.)</span></label>
+            <label>Outbound SOCKS5 Port <span style="font-weight:400;opacity:0.7">(for ACAP apps)</span></label>
             <input type="text" id="f-socks5port" placeholder="1080" autocomplete="off" spellcheck="false"/>
         </div>
     </div>
@@ -353,12 +353,12 @@
         <div class="info-item">
             <div class="info-label">HTTP / HTTPS Proxy</div>
             <div class="info-value" id="d-http">—</div>
-            <div class="info-label" style="margin-top:6px;font-size:10px;">Set in System → Network → Global proxies</div>
+            <div class="info-label" style="margin-top:6px;font-size:10px;">Set in System → Network → Global proxies &amp; System → MQTT</div>
         </div>
         <div class="info-item">
-            <div class="info-label">SOCKS5 Proxy (MQTT etc.)</div>
+            <div class="info-label">SOCKS5 Proxy (ACAP apps)</div>
             <div class="info-value" id="d-socks">—</div>
-            <div class="info-label" style="margin-top:6px;font-size:10px;">Set in each app/service proxy setting</div>
+            <div class="info-label" style="margin-top:6px;font-size:10px;">For third-party ACAP apps that support SOCKS5</div>
         </div>
     </div>
 </div>
