@@ -64,6 +64,8 @@ Open the app's settings page in the camera web UI and fill in:
 | **Peer Public Key** | Public key of your WireGuard server |
 | **Allowed IPs** | Routes to send through the VPN (default: `0.0.0.0/0` for all traffic) |
 | **Client IP** | This camera's IP address on the VPN network — e.g. `10.0.0.2/24` |
+| **HTTP Proxy Port** | Port for the HTTP CONNECT proxy on localhost (default: `8080`) |
+| **Outbound SOCKS5 Port** | Port for the outbound SOCKS5 proxy on localhost (default: `1080`) |
 
 The Private Key field will appear blank when you revisit the settings — this is expected behaviour for password-type parameters. The key is saved securely.
 
@@ -93,11 +95,11 @@ Once connected, three proxy services start on the camera:
 
 | Service | Default address | Purpose |
 |---|---|---|
-| **HTTP CONNECT proxy** | `http://127.0.0.1:8080` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
-| **Outbound SOCKS5** | `127.0.0.1:1080` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
+| **HTTP CONNECT proxy** | `http://127.0.0.1:<HTTPProxyPort>` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
+| **Outbound SOCKS5** | `127.0.0.1:<OutboundSOCKS5Port>` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
 | **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
 
-> **Port conflict handling:** If `8080` or `1080` are already in use by another application (e.g. another VPN ACAP), the app automatically tries the next port (`8081`, `8082`… or `1081`, `1082`…). The actual bound addresses are shown in the connection details panel in the UI.
+The HTTP proxy and outbound SOCKS5 ports are user-configurable in the settings (defaults: `8080` and `1080`). If the configured port is already in use by another application, the proxy will fail to start and log an error — change the port in settings to resolve the conflict. The actual bound addresses are shown in the connection details panel in the UI.
 
 ### Saving config
 
@@ -107,17 +109,17 @@ Click **Save** in the UI — the app stops the tunnel, applies the new config, a
 
 **Global HTTP/HTTPS proxy** — set in **System → Network → Global proxies**:
 ```
-HTTP proxy:  http://127.0.0.1:8080
-HTTPS proxy: http://127.0.0.1:8080
+HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
+HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
 ```
 
 **Built-in MQTT client** — set in **System → MQTT → Broker**:
 ```
-HTTP proxy:  http://127.0.0.1:8080
-HTTPS proxy: http://127.0.0.1:8080
+HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
+HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
 ```
 
-**ACAP apps / services using SOCKS5** — set their proxy to `127.0.0.1:1080`.
+**ACAP apps / services using SOCKS5** — set their proxy to `127.0.0.1:<OutboundSOCKS5Port>`.
 
 ## Config API
 
