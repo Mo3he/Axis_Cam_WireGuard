@@ -14,9 +14,9 @@ COPY LICENSE /opt/app/LICENSE
 
 WORKDIR /opt/app
 # Cross-compile the Go WireGuard binary for armv7hf (fully static, no CGO)
-RUN mkdir -p lib && \
-    cd wireguard && \
-    GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
+RUN mkdir -p lib
+WORKDIR /opt/app/wireguard
+RUN GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
     go build -ldflags='-s -w' -o ../lib/wireguard-userspace . && \
     chmod 755 ../lib/wireguard-userspace
 
@@ -29,6 +29,7 @@ ARG ACAP_VERSION=1.2.8
 RUN sed -i "s/VERSION=BUILDVER/VERSION=${ACAP_VERSION}/" package.conf
 
 # ACAP 3 firmware expects the settings page at the app root, not in html/
+# hadolint ignore=DL3059
 RUN cp html/index.html index.html
 
 # Build the C parameter bridge and package everything as an ACAP .eap

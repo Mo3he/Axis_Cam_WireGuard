@@ -1,22 +1,40 @@
 # WireGuard VPN ACAP
 
-A WireGuard VPN client that runs directly on Axis cameras as an ACAP application, enabling secure remote access without requiring any other equipment or network configuration. WireGuard achieves this in a secure, simple, and lightweight way.
+[![Build ACAP packages](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml)
+[![GitHub Super-Linter](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml)
+
+A WireGuard VPN client that runs directly on Axis cameras as an ACAP
+application, enabling secure remote access without requiring any other
+equipment or network configuration. WireGuard achieves this in a secure,
+simple, and lightweight way.
 
 Current version: **1.2.8**
 
-The app runs entirely in userspace using [wireguard-go](https://github.com/WireGuard/wireguard-go) + [gVisor netstack](https://gvisor.dev/), which means:
+The app runs entirely in userspace using
+[wireguard-go](https://github.com/WireGuard/wireguard-go) +
+[gVisor netstack](https://gvisor.dev/), which means:
 
 - **No root required** — runs as the standard unprivileged `sdk` ACAP user (ACAP 4 builds)
 - **Compatible with Axis OS 9.x through 12** — see the Compatibility section below
 - **No kernel TUN device** — all networking is handled inside the process
 
-Download the pre-built `.eap` for your camera's architecture from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
+Download the pre-built `.eap` for your camera's architecture from the
+[latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest)
+and install via the camera's web interface under **Apps → Add app**.
 
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mo3he)
 
-> **Disclaimer:** This is an independent, community-developed ACAP package and is not an official Axis Communications product. It is not affiliated with, endorsed by, or supported by Axis Communications AB. Use it at your own risk. For official Axis software, visit axis.com 
+> **Disclaimer:** This is an independent, community-developed ACAP package and
+> is not an official Axis Communications product. It is not affiliated with,
+> endorsed by, or supported by Axis Communications AB. Use it at your own risk.
+> For official Axis software, visit [axis.com](https://www.axis.com/).
 
-> **WireGuard Notice:** WireGuard is a registered trademark of Jason A. Donenfeld. This package independently redistributes [wireguard-go](https://github.com/WireGuard/wireguard-go) and related components under the MIT License and is not affiliated with, endorsed by, or supported by the WireGuard project or Jason A. Donenfeld. For the official WireGuard project, visit [wireguard.com](https://www.wireguard.com).
+> **WireGuard Notice:** WireGuard is a registered trademark of Jason A.
+> Donenfeld. This package independently redistributes
+> [wireguard-go](https://github.com/WireGuard/wireguard-go) and related
+> components under the MIT License and is not affiliated with, endorsed by, or
+> supported by the WireGuard project or Jason A. Donenfeld. For the official
+> WireGuard project, visit [wireguard.com](https://www.wireguard.com).
 
 ## Compatibility
 
@@ -40,9 +58,13 @@ curl --digest -u <username>:<password> \
 
 ## Installing
 
-Download the `.eap` for your camera from the [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and install via the camera's web interface under **Apps → Add app**.
+Download the `.eap` for your camera from the
+[latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest)
+and install via the camera's web interface under **Apps → Add app**.
 
-> **Note:** EAP files are not included in the repository. Always download from the [Releases](https://github.com/Mo3he/Axis_Cam_WireGuard/releases) page.
+> [!NOTE]
+> EAP files are not included in the repository. Always download from the
+> [Releases](https://github.com/Mo3he/Axis_Cam_WireGuard/releases) page.
 
 | SDK | Architecture | File |
 |---|---|---|
@@ -65,9 +87,12 @@ Open the app's settings page in the camera web UI and fill in:
 | **HTTP Proxy Port** | Port for the HTTP CONNECT proxy on localhost (default: `8080`) |
 | **Outbound SOCKS5 Port** | Port for the outbound SOCKS5 proxy on localhost (default: `1080`) |
 
-The Private Key field will appear blank when you revisit the settings — this is expected behaviour for password-type parameters. The key is saved securely.
+The Private Key field will appear blank when you revisit the settings — this is
+expected behaviour for password-type parameters. The key is saved securely.
 
-> **Tip:** Click **Import .conf** on the settings page to load all fields from a standard WireGuard `.conf` file at once.
+> [!TIP]
+> Click **Import .conf** on the settings page to load all fields from a
+> standard WireGuard `.conf` file at once.
 
 ### Generating keys
 
@@ -97,22 +122,30 @@ Once connected, three proxy services start on the camera:
 | **Outbound SOCKS5** | `127.0.0.1:<OutboundSOCKS5Port>` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
 | **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
 
-The HTTP proxy and outbound SOCKS5 ports are user-configurable in the settings (defaults: `8080` and `1080`). If the configured port is already in use by another application, the proxy will fail to start and log an error — change the port in settings to resolve the conflict. The actual bound addresses are shown in the connection details panel in the UI.
+The HTTP proxy and outbound SOCKS5 ports are user-configurable in the settings
+(defaults: `8080` and `1080`). If the configured port is already in use by
+another application, the proxy will fail to start and log an error — change the
+port in settings to resolve the conflict. The actual bound addresses are shown
+in the connection details panel in the UI.
 
 ### Saving config
 
-Click **Save** in the UI — the app stops the tunnel, applies the new config, and restarts within a few seconds. All six fields are saved as a single operation so only one restart occurs.
+Click **Save** in the UI — the app stops the tunnel, applies the new config,
+and restarts within a few seconds. All six fields are saved as a single
+operation so only one restart occurs.
 
 ### Routing outbound camera traffic through WireGuard
 
 **Global HTTP/HTTPS proxy** — set in **System → Network → Global proxies**:
-```
+
+```ini
 HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
 HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
 ```
 
 **Built-in MQTT client** — set in **System → MQTT → Broker**:
-```
+
+```ini
 HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
 HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
 ```
@@ -121,7 +154,9 @@ HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
 
 ## Config API
 
-The app exposes its configuration entirely through the standard VAPIX `param.cgi` endpoint — no custom API server required. Any HTTP client with camera credentials can read or write the config.
+The app exposes its configuration entirely through the standard VAPIX
+`param.cgi` endpoint — no custom API server required. Any HTTP client with
+camera credentials can read or write the config.
 
 ### Read current config
 
@@ -131,7 +166,8 @@ curl --digest -u admin:password \
 ```
 
 Example response:
-```
+
+```ini
 root.wireguardconfig.AllowedIPs=0.0.0.0/0
 root.wireguardconfig.ClientIP=10.0.0.2/24
 root.wireguardconfig.Endpoint=vpn.example.com:51820
@@ -154,7 +190,8 @@ curl --digest -u admin:password \
   'http://<camera-ip>/axis-cgi/param.cgi'
 ```
 
-The app watches for parameter changes and automatically applies the new config — no restart required. A successful update returns `OK`.
+The app watches for parameter changes and automatically applies the new config
+— no restart required. A successful update returns `OK`.
 
 ### Push config from a `.conf` file (shell helper)
 
@@ -194,5 +231,5 @@ cd acap3 && ./build.sh
 
 ## Links
 
-- https://www.wireguard.com/
-- https://www.axis.com/
+- <https://www.wireguard.com/>
+- <https://www.axis.com/>

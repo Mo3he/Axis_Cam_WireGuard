@@ -17,40 +17,41 @@
  */
 
 #include <axsdk/axparameter.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <glib-unix.h>
+#include <signal.h>
 #include <stdbool.h>
-#include <syslog.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <signal.h>
+#include <syslog.h>
+#include <unistd.h>
 
-#define APP_NAME   "wireguardconfig"
+#define APP_NAME "wireguardconfig"
 #define CONFIG_FILE "/usr/local/packages/wireguardconfig/config.txt"
-#define WG_BINARY   "/usr/local/packages/wireguardconfig/lib/wireguard-userspace"
+#define WG_BINARY "/usr/local/packages/wireguardconfig/lib/wireguard-userspace"
 
 static pid_t wg_pid = -1;
 static guint reload_timer_id = 0;
 
 /* ── cached config (updated in-place from callback value args) ─────────────── */
 
-static char *cfg_private_key      = NULL;
-static char *cfg_listen_port      = NULL;
-static char *cfg_endpoint         = NULL;
-static char *cfg_peer_pub_key     = NULL;
-static char *cfg_allowed_ips      = NULL;
-static char *cfg_client_ip        = NULL;
-static char *cfg_http_proxy_port  = NULL;
-static char *cfg_socks5_port      = NULL;
+static char *cfg_private_key = NULL;
+static char *cfg_listen_port = NULL;
+static char *cfg_endpoint = NULL;
+static char *cfg_peer_pub_key = NULL;
+static char *cfg_allowed_ips = NULL;
+static char *cfg_client_ip = NULL;
+static char *cfg_http_proxy_port = NULL;
+static char *cfg_socks5_port = NULL;
 
 static void cache_set(char **field, const char *value) {
-    if (!value) return;   /* NULL → keep existing cached value */
+    if (!value)
+        return; /* NULL → keep existing cached value */
     free(*field);
     *field = strdup(value);
 }
@@ -107,8 +108,7 @@ static gboolean watchdog_cb(gpointer G_GNUC_UNUSED data) {
         int status;
         pid_t ret = waitpid(wg_pid, &status, WNOHANG);
         if (ret == wg_pid) {
-            syslog(LOG_WARNING, "wireguard-userspace exited (status %d), restarting",
-                   WEXITSTATUS(status));
+            syslog(LOG_WARNING, "wireguard-userspace exited (status %d), restarting", WEXITSTATUS(status));
             wg_pid = -1;
             start_proxy();
         }
@@ -123,6 +123,7 @@ static void load_config_cache(AXParameter *handle) {
     GError *error = NULL;
     gchar *val = NULL;
 
+    // clang-format off
 #define LOAD(name, field) \
     val = NULL; error = NULL; \
     if (ax_parameter_get(handle, name, &val, &error)) { \
@@ -143,6 +144,7 @@ static void load_config_cache(AXParameter *handle) {
     LOAD("HTTPProxyPort",      cfg_http_proxy_port)
     LOAD("OutboundSOCKS5Port", cfg_socks5_port)
 #undef LOAD
+    // clang-format on
 }
 
 static void write_config_file(void) {
@@ -151,6 +153,7 @@ static void write_config_file(void) {
         syslog(LOG_ERR, "cannot open config file: %s", strerror(errno));
         return;
     }
+    // clang-format off
     fprintf(f, "private_key=%s\n",         cache_get(&cfg_private_key,  ""));
     fprintf(f, "listen_port=%s\n",         cache_get(&cfg_listen_port,  "51820"));
     fprintf(f, "endpoint=%s\n",            cache_get(&cfg_endpoint,     ""));
@@ -159,10 +162,10 @@ static void write_config_file(void) {
     fprintf(f, "client_ip=%s\n",           cache_get(&cfg_client_ip,    "10.0.0.2/24"));
     fprintf(f, "http_proxy_port=%s\n",     cache_get(&cfg_http_proxy_port, "8080"));
     fprintf(f, "outbound_socks5_port=%s\n",cache_get(&cfg_socks5_port,  "1080"));
+    // clang-format on
     fclose(f);
     chmod(CONFIG_FILE, 0600);
-    syslog(LOG_INFO, "config updated (endpoint=%s)",
-           cache_get(&cfg_endpoint, "(empty)"));
+    syslog(LOG_INFO, "config updated (endpoint=%s)", cache_get(&cfg_endpoint, "(empty)"));
 }
 
 /* ── ACAP parameter callback ──────────────────────────────────────────────── */
@@ -188,18 +191,17 @@ static gboolean debounced_restart(gpointer G_GNUC_UNUSED data) {
     return G_SOURCE_REMOVE;
 }
 
-static void parameter_changed(const gchar *name, const gchar *value,
-                               gpointer G_GNUC_UNUSED handle_void_ptr) {
+static void parameter_changed(const gchar *name, const gchar *value, gpointer G_GNUC_UNUSED handle_void_ptr) {
     /* Use the last component after '.' as the short name.
      * The full name casing varies by firmware (e.g. "root.Wireguardconfig.Endpoint"
      * vs "root.wireguardconfig.Endpoint") so we never rely on the prefix. */
     const char *dot = strrchr(name, '.');
     const char *short_name = dot ? dot + 1 : name;
 
-    syslog(LOG_INFO, "parameter changed: %s value=%s (raw name: %s)",
-           short_name, value ? value : "(null)", name);
+    syslog(LOG_INFO, "parameter changed: %s value=%s (raw name: %s)", short_name, value ? value : "(null)", name);
 
     /* Cache the new value from the callback argument if non-NULL. */
+    // clang-format off
     if      (strcmp(short_name, "PrivateKey")         == 0) cache_set(&cfg_private_key,      value);
     else if (strcmp(short_name, "ListenPort")         == 0) cache_set(&cfg_listen_port,      value);
     else if (strcmp(short_name, "Endpoint")           == 0) cache_set(&cfg_endpoint,         value);
@@ -209,6 +211,7 @@ static void parameter_changed(const gchar *name, const gchar *value,
     else if (strcmp(short_name, "HTTPProxyPort")      == 0) cache_set(&cfg_http_proxy_port,  value);
     else if (strcmp(short_name, "OutboundSOCKS5Port") == 0) cache_set(&cfg_socks5_port,      value);
     else syslog(LOG_WARNING, "unknown parameter: %s (raw: %s)", short_name, name);
+    // clang-format on
 
     /* Coalesce all 6 saves into one restart 300 ms after the last change. */
     if (reload_timer_id)
@@ -235,9 +238,9 @@ int main(void) {
 
     AXParameter *handle = ax_parameter_new(APP_NAME, &error);
     if (!handle) {
-        syslog(LOG_ERR, "ax_parameter_new: %s",
-               error ? error->message : "unknown");
-        if (error) g_error_free(error);
+        syslog(LOG_ERR, "ax_parameter_new: %s", error ? error->message : "unknown");
+        if (error)
+            g_error_free(error);
         return 1;
     }
     g_ax_handle = handle;
@@ -247,22 +250,27 @@ int main(void) {
     start_proxy();
 
     const char *params[] = {
-        "PrivateKey", "ListenPort", "Endpoint",
-        "PeerPublicKey", "AllowedIPs", "ClientIP",
-        "HTTPProxyPort", "OutboundSOCKS5Port"
-    };
+        "PrivateKey",
+        "ListenPort",
+        "Endpoint",
+        "PeerPublicKey",
+        "AllowedIPs",
+        "ClientIP",
+        "HTTPProxyPort",
+        "OutboundSOCKS5Port"};
     for (size_t i = 0; i < sizeof(params) / sizeof(params[0]); i++) {
-        if (!ax_parameter_register_callback(handle, params[i],
-                                            parameter_changed, handle, &error)) {
-            syslog(LOG_WARNING, "register callback %s: %s",
-                   params[i], error ? error->message : "unknown");
-            if (error) { g_error_free(error); error = NULL; }
+        if (!ax_parameter_register_callback(handle, params[i], parameter_changed, handle, &error)) {
+            syslog(LOG_WARNING, "register callback %s: %s", params[i], error ? error->message : "unknown");
+            if (error) {
+                g_error_free(error);
+                error = NULL;
+            }
         }
     }
 
     GMainLoop *loop = g_main_loop_new(NULL, FALSE);
     g_unix_signal_add(SIGTERM, signal_handler, loop);
-    g_unix_signal_add(SIGINT,  signal_handler, loop);
+    g_unix_signal_add(SIGINT, signal_handler, loop);
     g_timeout_add_seconds(60, watchdog_cb, NULL);
 
     syslog(LOG_INFO, "running — waiting for parameter changes");

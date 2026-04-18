@@ -51,14 +51,14 @@ const socks5Port = 1080
 
 // Config holds parsed WireGuard settings from the config file.
 type Config struct {
-	PrivateKey          string
-	ListenPort          string
-	Endpoint            string
-	PeerPubKey          string
-	AllowedIPs          string
-	ClientIP            string
-	HTTPProxyPort       string
-	OutboundSOCKS5Port  string
+	PrivateKey         string
+	ListenPort         string
+	Endpoint           string
+	PeerPubKey         string
+	AllowedIPs         string
+	ClientIP           string
+	HTTPProxyPort      string
+	OutboundSOCKS5Port string
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -66,6 +66,7 @@ func loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	//nolint:errcheck
 	defer f.Close()
 
 	cfg := &Config{
@@ -260,6 +261,8 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 // considered "ok" if it occurred within the last 3 minutes (2× the 90-second
 // WireGuard handshake expiry; keepalive is 25 s so a healthy tunnel will
 // re-handshake well within that window).
+//
+//nolint:gocyclo
 func (t *tunnel) runHandshakeMonitor() {
 	defer t.wg.Done()
 
@@ -317,13 +320,17 @@ func (t *tunnel) runHandshakeMonitor() {
 func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int, dstAddr string) {
 	defer t.wg.Done()
 
+	if port < 0 || port > 65535 {
+		slog.Error("invalid port", "port", port)
+		return
+	}
 	listenAddr := net.TCPAddrFromAddrPort(netip.AddrPortFrom(localAddr, uint16(port)))
 	ln, err := t.tnet.ListenTCP(listenAddr)
 	if err != nil {
 		slog.Error("proxy listen", "port", port, "err", err)
 		return
 	}
-	go func() { <-t.stopCh; ln.Close() }()
+	go func() { <-t.stopCh; _ = ln.Close() }()
 
 	for {
 		c, err := ln.Accept()
@@ -343,15 +350,17 @@ func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int, dstAddr string) {
 
 // relay opens a connection to dst and bidirectionally copies data.
 func relay(src net.Conn, dst string) {
+	//nolint:errcheck
 	defer src.Close()
 	dstConn, err := net.DialTimeout("tcp", dst, 10*time.Second)
 	if err != nil {
 		return
 	}
+	//nolint:errcheck
 	defer dstConn.Close()
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(dstConn, src); done <- struct{}{} }()
-	go func() { io.Copy(src, dstConn); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(dstConn, src); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(src, dstConn); done <- struct{}{} }()
 	<-done
 }
 
@@ -362,13 +371,17 @@ func relay(src net.Conn, dst string) {
 func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 	defer t.wg.Done()
 
+	if port < 0 || port > 65535 {
+		slog.Error("invalid port", "port", port)
+		return
+	}
 	listenAddr := net.TCPAddrFromAddrPort(netip.AddrPortFrom(localAddr, uint16(port)))
 	ln, err := t.tnet.ListenTCP(listenAddr)
 	if err != nil {
 		slog.Error("socks5 listen", "err", err)
 		return
 	}
-	go func() { <-t.stopCh; ln.Close() }()
+	go func() { <-t.stopCh; _ = ln.Close() }()
 	slog.Info("SOCKS5 proxy ready", "addr", listenAddr)
 
 	for {
@@ -391,8 +404,9 @@ func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 // Only CONNECT is supported; the destination host is always replaced with
 // 127.0.0.1 so the proxy only reaches local camera services.
 func handleSOCKS5(c net.Conn) {
+	//nolint:errcheck
 	defer c.Close()
-	c.SetDeadline(time.Now().Add(30 * time.Second))
+	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 
 	buf := make([]byte, 257)
 
@@ -408,14 +422,14 @@ func handleSOCKS5(c net.Conn) {
 		return
 	}
 	// Reply: no authentication required
-	c.Write([]byte{0x05, 0x00})
+	_, _ = c.Write([]byte{0x05, 0x00})
 
 	// Request: VER CMD RSV ATYP ...
 	if _, err := io.ReadFull(c, buf[:4]); err != nil {
 		return
 	}
 	if buf[0] != 0x05 || buf[1] != 0x01 { // only CONNECT
-		c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // command not supported
+		_, _ = c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // command not supported
 		return
 	}
 
@@ -441,27 +455,28 @@ func handleSOCKS5(c net.Conn) {
 		}
 		port = binary.BigEndian.Uint16(buf[16:18])
 	default:
-		c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // address type not supported
+		_, _ = c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // address type not supported
 		return
 	}
 
 	dst := fmt.Sprintf("127.0.0.1:%d", port)
-	c.SetDeadline(time.Time{})
+	_ = c.SetDeadline(time.Time{})
 
 	dstConn, err := net.DialTimeout("tcp", dst, 10*time.Second)
 	if err != nil {
-		c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // host unreachable
+		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // host unreachable
 		return
 	}
+	//nolint:errcheck
 	defer dstConn.Close()
 
 	// Success reply
-	c.Write([]byte{0x05, 0x00, 0x00, 0x01, 127, 0, 0, 1,
+	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 127, 0, 0, 1,
 		byte(port >> 8), byte(port)})
 
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(dstConn, c); done <- struct{}{} }()
-	go func() { io.Copy(c, dstConn); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(dstConn, c); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(c, dstConn); done <- struct{}{} }()
 	<-done
 }
 
@@ -477,7 +492,7 @@ func (t *tunnel) runHTTPProxy(port int) {
 		slog.Error("http proxy listen failed — port is in use, change HTTPProxyPort in settings", "port", port, "err", err)
 		return
 	}
-	go func() { <-t.stopCh; ln.Close() }()
+	go func() { <-t.stopCh; _ = ln.Close() }()
 	slog.Info("HTTP CONNECT proxy ready", "addr", ln.Addr())
 
 	for {
@@ -515,8 +530,9 @@ func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, erro
 
 // handleHTTPProxy serves one client connection from the HTTP CONNECT proxy.
 func (t *tunnel) handleHTTPProxy(c net.Conn) {
+	//nolint:errcheck
 	defer c.Close()
-	c.SetDeadline(time.Now().Add(30 * time.Second))
+	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 
 	rd := bufio.NewReader(c)
 
@@ -547,23 +563,24 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		upstream, err := t.dialViaWG(ctx, target)
 		cancel()
 		if err != nil {
-			fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
+			_, _ = fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
 			return
 		}
+		//nolint:errcheck
 		defer upstream.Close()
 
-		c.SetDeadline(time.Time{})
-		fmt.Fprintf(c, "%s 200 Connection established\r\n\r\n", httpVer)
+		_ = c.SetDeadline(time.Time{})
+		_, _ = fmt.Fprintf(c, "%s 200 Connection established\r\n\r\n", httpVer)
 
 		done := make(chan struct{}, 2)
-		go func() { io.Copy(upstream, rd); done <- struct{}{} }()
-		go func() { io.Copy(c, upstream); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()
 		<-done
 	} else {
 		// Plain HTTP: rewrite absolute URI to relative, forward to remote host.
 		u, err := url.Parse(target)
 		if err != nil {
-			fmt.Fprintf(c, "%s 400 Bad Request\r\n\r\n", httpVer)
+			_, _ = fmt.Fprintf(c, "%s 400 Bad Request\r\n\r\n", httpVer)
 			return
 		}
 		host := u.Host
@@ -589,20 +606,21 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		upstream, err := t.dialViaWG(ctx, host)
 		cancel()
 		if err != nil {
-			fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
+			_, _ = fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
 			return
 		}
+		//nolint:errcheck
 		defer upstream.Close()
 
-		c.SetDeadline(time.Time{})
-		fmt.Fprintf(upstream, "%s %s %s\r\n", method, relativePath, httpVer)
+		_ = c.SetDeadline(time.Time{})
+		_, _ = fmt.Fprintf(upstream, "%s %s %s\r\n", method, relativePath, httpVer)
 		for _, h := range headerLines {
-			upstream.Write([]byte(h))
+			_, _ = upstream.Write([]byte(h))
 		}
 
 		done := make(chan struct{}, 2)
-		go func() { io.Copy(upstream, rd); done <- struct{}{} }()
-		go func() { io.Copy(c, upstream); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()
 		<-done
 	}
 }
@@ -619,7 +637,7 @@ func (t *tunnel) runOutboundSOCKS5(port int) {
 		slog.Error("outbound socks5 listen failed — port is in use, change OutboundSOCKS5Port in settings", "port", port, "err", err)
 		return
 	}
-	go func() { <-t.stopCh; ln.Close() }()
+	go func() { <-t.stopCh; _ = ln.Close() }()
 	slog.Info("Outbound SOCKS5 proxy ready", "addr", ln.Addr())
 
 	for {
@@ -641,8 +659,9 @@ func (t *tunnel) runOutboundSOCKS5(port int) {
 // handleOutboundSOCKS5 implements the SOCKS5 server-side handshake (RFC 1928)
 // and forwards the accepted connection to the real destination via WireGuard.
 func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
+	//nolint:errcheck
 	defer c.Close()
-	c.SetDeadline(time.Now().Add(30 * time.Second))
+	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 
 	buf := make([]byte, 257)
 
@@ -657,14 +676,14 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 	if _, err := io.ReadFull(c, buf[:nmethods]); err != nil {
 		return
 	}
-	c.Write([]byte{0x05, 0x00}) // no auth required
+	_, _ = c.Write([]byte{0x05, 0x00}) // no auth required
 
 	// Request
 	if _, err := io.ReadFull(c, buf[:4]); err != nil {
 		return
 	}
 	if buf[0] != 0x05 || buf[1] != 0x01 {
-		c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		_, _ = c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 		return
 	}
 
@@ -696,27 +715,28 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 		port := binary.BigEndian.Uint16(buf[16:18])
 		hostport = net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	default:
-		c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		_, _ = c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 		return
 	}
 
-	c.SetDeadline(time.Time{})
+	_ = c.SetDeadline(time.Time{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	upstream, err := t.dialViaWG(ctx, hostport)
 	cancel()
 	if err != nil {
-		c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 		return
 	}
+	//nolint:errcheck
 	defer upstream.Close()
 
 	// Success
-	c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(upstream, c); done <- struct{}{} }()
-	go func() { io.Copy(c, upstream); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(upstream, c); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()
 	<-done
 }
 
