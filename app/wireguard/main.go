@@ -66,8 +66,7 @@ func loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	//nolint:errcheck
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	cfg := &Config{
 		AllowedIPs:         "0.0.0.0/0",
@@ -350,14 +349,12 @@ func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int, dstAddr string) {
 
 // relay opens a connection to dst and bidirectionally copies data.
 func relay(src net.Conn, dst string) {
-	//nolint:errcheck
-	defer src.Close()
+	defer src.Close() //nolint:errcheck
 	dstConn, err := net.DialTimeout("tcp", dst, 10*time.Second)
 	if err != nil {
 		return
 	}
-	//nolint:errcheck
-	defer dstConn.Close()
+	defer dstConn.Close() //nolint:errcheck
 	done := make(chan struct{}, 2)
 	go func() { _, _ = io.Copy(dstConn, src); done <- struct{}{} }()
 	go func() { _, _ = io.Copy(src, dstConn); done <- struct{}{} }()
@@ -404,8 +401,7 @@ func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 // Only CONNECT is supported; the destination host is always replaced with
 // 127.0.0.1 so the proxy only reaches local camera services.
 func handleSOCKS5(c net.Conn) {
-	//nolint:errcheck
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 
 	buf := make([]byte, 257)
@@ -467,8 +463,7 @@ func handleSOCKS5(c net.Conn) {
 		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // host unreachable
 		return
 	}
-	//nolint:errcheck
-	defer dstConn.Close()
+	defer dstConn.Close() //nolint:errcheck
 
 	// Success reply
 	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 127, 0, 0, 1,
@@ -530,8 +525,7 @@ func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, erro
 
 // handleHTTPProxy serves one client connection from the HTTP CONNECT proxy.
 func (t *tunnel) handleHTTPProxy(c net.Conn) {
-	//nolint:errcheck
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 
 	rd := bufio.NewReader(c)
@@ -566,8 +560,7 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 			_, _ = fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
 			return
 		}
-		//nolint:errcheck
-		defer upstream.Close()
+		defer upstream.Close() //nolint:errcheck
 
 		_ = c.SetDeadline(time.Time{})
 		_, _ = fmt.Fprintf(c, "%s 200 Connection established\r\n\r\n", httpVer)
@@ -609,8 +602,7 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 			_, _ = fmt.Fprintf(c, "%s 502 Bad Gateway\r\n\r\n", httpVer)
 			return
 		}
-		//nolint:errcheck
-		defer upstream.Close()
+		defer upstream.Close() //nolint:errcheck
 
 		_ = c.SetDeadline(time.Time{})
 		_, _ = fmt.Fprintf(upstream, "%s %s %s\r\n", method, relativePath, httpVer)
@@ -659,8 +651,7 @@ func (t *tunnel) runOutboundSOCKS5(port int) {
 // handleOutboundSOCKS5 implements the SOCKS5 server-side handshake (RFC 1928)
 // and forwards the accepted connection to the real destination via WireGuard.
 func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
-	//nolint:errcheck
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 
 	buf := make([]byte, 257)
@@ -728,8 +719,7 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 		return
 	}
-	//nolint:errcheck
-	defer upstream.Close()
+	defer upstream.Close() //nolint:errcheck
 
 	// Success
 	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
