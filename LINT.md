@@ -52,6 +52,10 @@ hadolint $(find -type f -name Dockerfile\*)
 # Lint Dockerfile files (alternative command)
 find -type f -name Dockerfile\* -exec hadolint {} +
 
+# Lint Go files
+cd /tmp/lint/<directory with go files>
+golangci-lint run ./...
+
 # Lint JSON files
 eslint -c /action/lib/.automation/eslint.config.mjs --ext .json .
 
