@@ -13,6 +13,7 @@ FROM docker.io/golang:${GO_VERSION} AS gobuilder-armv7hf
 ENV GOARCH=arm
 ENV GOARM=7
 
+# hadolint ignore=DL3006
 FROM gobuilder-${ARCH} AS gobuilder
 ARG ARCH
 
