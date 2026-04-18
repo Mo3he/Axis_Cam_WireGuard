@@ -20,13 +20,15 @@ RUN GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
     go build -ldflags='-s -w' -o ../lib/wireguard-userspace . && \
     chmod 755 ../lib/wireguard-userspace
 
-FROM docker.io/axisecp/acap-sdk:3.5-armv7hf-ubuntu${UBUNTU_VERSION}
+FROM docker.io/axisecp/acap-sdk:3.5-armv7hf-ubuntu${UBUNTU_VERSION} AS builder
 COPY --from=gobuilder /opt/app /opt/app
 WORKDIR /opt/app
 
 # Patch the version placeholder in package.conf
-ARG ACAP_VERSION=1.2.8
-RUN sed -i "s/VERSION=BUILDVER/VERSION=${ACAP_VERSION}/" package.conf
+ARG APPMAJORVERSION=1
+ARG APPMINORVERSION=2
+ARG APPMICROVERSION=8
+RUN sed -i "s/VER_MAJOR/${APPMAJORVERSION}/g;s/VER_MINOR/${APPMINORVERSION}/g;s/VER_MICRO/${APPMICROVERSION}/g" package.conf
 
 # ACAP 3 firmware expects the settings page at the app root, not in html/
 # hadolint ignore=DL3059
@@ -36,3 +38,6 @@ RUN cp html/index.html index.html
 RUN . /opt/axis/acapsdk/environment-setup* && \
     make && \
     create-package.sh .
+
+FROM scratch
+COPY --from=builder /opt/app/*eap /

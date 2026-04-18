@@ -24,7 +24,7 @@ RUN GOOS=linux CGO_ENABLED=0 \
     chmod 755 ../lib/wireguard-userspace
 
 # Create ACAP package
-FROM ${REPO}/${SDK}:${VERSION}-${ARCH}-ubuntu${UBUNTU_VERSION}
+FROM ${REPO}/${SDK}:${VERSION}-${ARCH}-ubuntu${UBUNTU_VERSION} AS builder
 ARG ARCH
 COPY --from=gobuilder /opt/app /opt/app
 WORKDIR /opt/app
@@ -34,3 +34,6 @@ RUN sed -i "s/\"BUILDARCH\"/\"${ARCH}\"/" manifest.json
 
 # Build the ACAP package (compiles the C binary and packages everything)
 RUN . /opt/axis/acapsdk/environment-setup* && acap-build .
+
+FROM scratch
+COPY --from=builder /opt/app/*eap /

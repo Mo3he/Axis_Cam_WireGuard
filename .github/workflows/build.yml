@@ -17,11 +17,13 @@ jobs:
       matrix:
         # Build both current and ACAP 3 version
         directory: [".", "acap3"]
+        # Build with both Docker and Podman
+        runtime: ["docker", "podman"]
     steps:
       - uses: actions/checkout@v6
       # Test all Makefile targets and make sure the ACAP files are created
       - name: Build
-        run: ${{ matrix.directory }}/build.sh
+        run: RUNTIME=${{ matrix.runtime }} ${{ matrix.directory }}/build.sh
       - name: Verify
         run: |
           for f in *.eap; do
