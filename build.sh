@@ -1,7 +1,7 @@
-#!/bin/bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT=$(cd -P "$(dirname "$0")" && pwd)
 
 for ARCH in aarch64 armv7hf; do
     echo "==> Building ${ARCH}..."
@@ -15,5 +15,5 @@ for ARCH in aarch64 armv7hf; do
     rm -rf "/tmp/${ARCH}-out"
 done
 
-echo "==> Done!"
+echo '==> Done!'
 ls -lh "$REPO_ROOT"/*.eap
