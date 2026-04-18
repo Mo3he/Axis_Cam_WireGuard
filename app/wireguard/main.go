@@ -356,8 +356,8 @@ func relay(src net.Conn, dst string) {
 	}
 	defer dstConn.Close() //nolint:errcheck
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(dstConn, src); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(src, dstConn); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(dstConn, src); done <- struct{}{} }() //nolint:errcheck
+	go func() { _, _ = io.Copy(src, dstConn); done <- struct{}{} }() //nolint:errcheck
 	<-done
 }
 
@@ -402,7 +402,7 @@ func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 // 127.0.0.1 so the proxy only reaches local camera services.
 func handleSOCKS5(c net.Conn) {
 	defer c.Close() //nolint:errcheck
-	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
+	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
 
 	buf := make([]byte, 257)
 
@@ -418,14 +418,14 @@ func handleSOCKS5(c net.Conn) {
 		return
 	}
 	// Reply: no authentication required
-	_, _ = c.Write([]byte{0x05, 0x00})
+	_, _ = c.Write([]byte{0x05, 0x00}) //nolint:errcheck
 
 	// Request: VER CMD RSV ATYP ...
 	if _, err := io.ReadFull(c, buf[:4]); err != nil {
 		return
 	}
 	if buf[0] != 0x05 || buf[1] != 0x01 { // only CONNECT
-		_, _ = c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // command not supported
+		_, _ = c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck // command not supported
 		return
 	}
 
@@ -451,27 +451,27 @@ func handleSOCKS5(c net.Conn) {
 		}
 		port = binary.BigEndian.Uint16(buf[16:18])
 	default:
-		_, _ = c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // address type not supported
+		_, _ = c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck // address type not supported
 		return
 	}
 
 	dst := fmt.Sprintf("127.0.0.1:%d", port)
-	_ = c.SetDeadline(time.Time{})
+	_ = c.SetDeadline(time.Time{}) //nolint:errcheck
 
 	dstConn, err := net.DialTimeout("tcp", dst, 10*time.Second)
 	if err != nil {
-		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // host unreachable
+		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck // host unreachable
 		return
 	}
 	defer dstConn.Close() //nolint:errcheck
 
 	// Success reply
-	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 127, 0, 0, 1,
-		byte(port >> 8), byte(port)})
+	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 127, 0, 0, 1, //nolint:errcheck
+		byte(port >> 8), byte(port)}) //nolint:gosec
 
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(dstConn, c); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(c, dstConn); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(dstConn, c); done <- struct{}{} }() //nolint:errcheck
+	go func() { _, _ = io.Copy(c, dstConn); done <- struct{}{} }() //nolint:errcheck
 	<-done
 }
 
@@ -526,7 +526,7 @@ func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, erro
 // handleHTTPProxy serves one client connection from the HTTP CONNECT proxy.
 func (t *tunnel) handleHTTPProxy(c net.Conn) {
 	defer c.Close() //nolint:errcheck
-	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
+	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
 
 	rd := bufio.NewReader(c)
 
@@ -562,12 +562,12 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		}
 		defer upstream.Close() //nolint:errcheck
 
-		_ = c.SetDeadline(time.Time{})
+		_ = c.SetDeadline(time.Time{}) //nolint:errcheck
 		_, _ = fmt.Fprintf(c, "%s 200 Connection established\r\n\r\n", httpVer)
 
 		done := make(chan struct{}, 2)
-		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }()
-		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }() //nolint:errcheck
+		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }() //nolint:errcheck
 		<-done
 	} else {
 		// Plain HTTP: rewrite absolute URI to relative, forward to remote host.
@@ -604,15 +604,15 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		}
 		defer upstream.Close() //nolint:errcheck
 
-		_ = c.SetDeadline(time.Time{})
+		_ = c.SetDeadline(time.Time{}) //nolint:errcheck
 		_, _ = fmt.Fprintf(upstream, "%s %s %s\r\n", method, relativePath, httpVer)
 		for _, h := range headerLines {
-			_, _ = upstream.Write([]byte(h))
+			_, _ = upstream.Write([]byte(h)) //nolint:errcheck
 		}
 
 		done := make(chan struct{}, 2)
-		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }()
-		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }() //nolint:errcheck
+		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }() //nolint:errcheck
 		<-done
 	}
 }
@@ -652,7 +652,7 @@ func (t *tunnel) runOutboundSOCKS5(port int) {
 // and forwards the accepted connection to the real destination via WireGuard.
 func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 	defer c.Close() //nolint:errcheck
-	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
+	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
 
 	buf := make([]byte, 257)
 
@@ -667,14 +667,14 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 	if _, err := io.ReadFull(c, buf[:nmethods]); err != nil {
 		return
 	}
-	_, _ = c.Write([]byte{0x05, 0x00}) // no auth required
+	_, _ = c.Write([]byte{0x05, 0x00}) //nolint:errcheck // no auth required
 
 	// Request
 	if _, err := io.ReadFull(c, buf[:4]); err != nil {
 		return
 	}
 	if buf[0] != 0x05 || buf[1] != 0x01 {
-		_, _ = c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		_, _ = c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck
 		return
 	}
 
@@ -706,27 +706,27 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 		port := binary.BigEndian.Uint16(buf[16:18])
 		hostport = net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	default:
-		_, _ = c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		_, _ = c.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck
 		return
 	}
 
-	_ = c.SetDeadline(time.Time{})
+	_ = c.SetDeadline(time.Time{}) //nolint:errcheck
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	upstream, err := t.dialViaWG(ctx, hostport)
 	cancel()
 	if err != nil {
-		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck
 		return
 	}
 	defer upstream.Close() //nolint:errcheck
 
 	// Success
-	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck
 
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(upstream, c); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(upstream, c); done <- struct{}{} }() //nolint:errcheck
+	go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }() //nolint:errcheck
 	<-done
 }
 
@@ -757,7 +757,7 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 	return h.stderr.WithGroup(name)
 }
 func (h *multiHandler) Handle(ctx context.Context, r slog.Record) error {
-	_ = h.stderr.Handle(ctx, r)
+	_ = h.stderr.Handle(ctx, r) //nolint:errcheck
 	if h.sys != nil {
 		msg := r.Message
 		r.Attrs(func(a slog.Attr) bool {
@@ -766,11 +766,11 @@ func (h *multiHandler) Handle(ctx context.Context, r slog.Record) error {
 		})
 		switch {
 		case r.Level >= slog.LevelError:
-			_ = h.sys.Err(msg)
+			_ = h.sys.Err(msg) //nolint:errcheck
 		case r.Level >= slog.LevelWarn:
-			_ = h.sys.Warning(msg)
+			_ = h.sys.Warning(msg) //nolint:errcheck
 		default:
-			_ = h.sys.Info(msg)
+			_ = h.sys.Info(msg) //nolint:errcheck
 		}
 	}
 	return nil
@@ -783,14 +783,14 @@ func main() {
 	}
 
 	slog.SetDefault(slog.New(newMultiHandler(os.Stderr)))
-	slog.Info("wireguard-userspace starting", "config", configPath)
+	slog.Info("wireguard-userspace starting", "config", configPath) //nolint:gosec
 
 	app := &appState{configPath: configPath}
 
 	// Seed lastMod from the file so the 30s ticker doesn't trigger a
 	// spurious reload on its first fire (which would restart the tunnel
 	// before the 25s keepalive has a chance to initiate the handshake).
-	if info, err := os.Stat(configPath); err == nil {
+	if info, err := os.Stat(configPath); err == nil { //nolint:gosec
 		app.lastMod = info.ModTime()
 	}
 
@@ -819,7 +819,7 @@ func main() {
 				return
 			}
 		case <-ticker.C:
-			info, err := os.Stat(configPath)
+			info, err := os.Stat(configPath) //nolint:gosec
 			if err == nil && info.ModTime().After(app.lastMod) {
 				app.lastMod = info.ModTime()
 				slog.Info("config file changed — reloading")
