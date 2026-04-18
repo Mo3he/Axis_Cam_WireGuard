@@ -401,7 +401,7 @@ func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 // Only CONNECT is supported; the destination host is always replaced with
 // 127.0.0.1 so the proxy only reaches local camera services.
 func handleSOCKS5(c net.Conn) {
-	defer c.Close() //nolint:errcheck
+	defer c.Close()                                     //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
 
 	buf := make([]byte, 257)
@@ -525,7 +525,7 @@ func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, erro
 
 // handleHTTPProxy serves one client connection from the HTTP CONNECT proxy.
 func (t *tunnel) handleHTTPProxy(c net.Conn) {
-	defer c.Close() //nolint:errcheck
+	defer c.Close()                                     //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
 
 	rd := bufio.NewReader(c)
@@ -567,7 +567,7 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 
 		done := make(chan struct{}, 2)
 		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }() //nolint:errcheck
-		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }() //nolint:errcheck
+		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()  //nolint:errcheck
 		<-done
 	} else {
 		// Plain HTTP: rewrite absolute URI to relative, forward to remote host.
@@ -585,8 +585,8 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		// Collect headers so we can forward them verbatim.
 		var headerLines []string
 		for {
-			line, err := rd.ReadString('\n')
-			if err != nil {
+			line, readErr := rd.ReadString('\n')
+			if readErr != nil {
 				return
 			}
 			headerLines = append(headerLines, line)
@@ -612,7 +612,7 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 
 		done := make(chan struct{}, 2)
 		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }() //nolint:errcheck
-		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }() //nolint:errcheck
+		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()  //nolint:errcheck
 		<-done
 	}
 }
@@ -651,7 +651,7 @@ func (t *tunnel) runOutboundSOCKS5(port int) {
 // handleOutboundSOCKS5 implements the SOCKS5 server-side handshake (RFC 1928)
 // and forwards the accepted connection to the real destination via WireGuard.
 func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
-	defer c.Close() //nolint:errcheck
+	defer c.Close()                                     //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
 
 	buf := make([]byte, 257)
