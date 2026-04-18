@@ -613,7 +613,7 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		defer upstream.Close()
 
 		_ = c.SetDeadline(time.Time{})
-		_ , _ = fmt.Fprintf(upstream, "%s %s %s\r\n", method, relativePath, httpVer)
+		_, _ = fmt.Fprintf(upstream, "%s %s %s\r\n", method, relativePath, httpVer)
 		for _, h := range headerLines {
 			_, _ = upstream.Write([]byte(h))
 		}
@@ -736,7 +736,7 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 
 	done := make(chan struct{}, 2)
 	go func() { _, _ = io.Copy(upstream, c); done <- struct{}{} }()
-	go func() { _ , _ = io.Copy(c, upstream); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()
 	<-done
 }
 
