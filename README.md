@@ -2,6 +2,7 @@
 
 [![Build ACAP packages](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml)
 [![GitHub Super-Linter](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-orange?style=flat&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/mo3he)
 
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP
 application, enabling secure remote access without requiring any other
@@ -22,7 +23,6 @@ Download the pre-built `.eap` for your camera's architecture from the
 [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest)
 and install via the camera's web interface under **Apps → Add app**.
 
-[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mo3he)
 
 > **Disclaimer:** This is an independent, community-developed ACAP package and
 > is not an official Axis Communications product. It is not affiliated with,
