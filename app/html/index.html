@@ -553,6 +553,10 @@
     function renderLogs(txt) {
         var lines = txt.split('\n').filter(function(l) { return l.trim(); });
         document.getElementById('log-count').textContent = lines.length + ' lines';
+        if (!lines.length) {
+            logBox.innerHTML = '<span class="log-line"><span class="msg-warn">No log entries found — the system log may have rotated. If the status shows Connected the service is still running.</span></span>';
+            return;
+        }
         var h = '';
         for (var i = 0; i < lines.length; i++) {
             var parts = lines[i].match(/^(\S+\s+\d+\s+[\d:]+)\s+(.*)/);
@@ -588,6 +592,20 @@
             if (/shutting down|Deactivated successfully|acapctl.*stop/.test(lines[i])) lastDownIdx    = i;
         }
 
+        // If the log has no relevant events at all (empty or fully rotated),
+        // fall back to the localStorage cache before doing anything else.
+        // This prevents incorrectly showing "Stopped" when the log rolls over
+        // while the tunnel is still running.
+        if (lastUpIdx === -1 && lastDownIdx === -1 && lastHandshakeOk === -1 && lastHandshakeLost === -1) {
+            try {
+                var cached = JSON.parse(localStorage.getItem('wg_cache') || 'null');
+                if (cached) {
+                    return { state: 'connected', ip: cached.ip, endpoint: cached.ep, httpProxy: cached.httpProxy || null, socks5Proxy: cached.socks5Proxy || null };
+                }
+            } catch(e) {}
+            return { state: 'connecting', ip: null, endpoint: null, httpProxy: null, socks5Proxy: null };
+        }
+
         var ip = null, ep = null, httpProxy = null, socks5Proxy = null;
 
         // Extract ip/endpoint from the last tunnel-up line (always present on start)
@@ -609,36 +627,42 @@
         // A handshake-ok after the last tunnel-up (and after any down) = connected
         // A handshake-lost / down after last handshake-ok = disconnected
         // We haven't seen a handshake line yet but tunnel came up = "connecting"
-        var tunStarted  = lastUpIdx > lastDownIdx && lastUpIdx !== -1;
-        var hsOkAfterUp = lastHandshakeOk > lastUpIdx && lastHandshakeOk > lastDownIdx;
+        var tunStarted    = lastUpIdx > lastDownIdx && lastUpIdx !== -1;
+        var hsOkAfterUp   = lastHandshakeOk > lastUpIdx && lastHandshakeOk > lastDownIdx;
         var hsLostAfterOk = lastHandshakeLost > lastHandshakeOk;
-        var tunDown     = lastDownIdx > lastUpIdx && lastDownIdx !== -1;
+        var tunDown       = lastDownIdx > lastUpIdx && lastDownIdx !== -1;
 
-        var recentLines = lines.slice(-20).join('\n');
+        var recentLines  = lines.slice(-20).join('\n');
         var isIncomplete = /config incomplete/.test(txt);
         var hasError     = /level=ERROR/.test(recentLines);
 
         var state;
-        if      (tunDown)         state = 'disconnected';
+        if      (tunDown)                       state = 'disconnected';
         else if (hsOkAfterUp && !hsLostAfterOk) state = 'connected';
-        else if (hsLostAfterOk)   state = 'disconnected';
-        else if (hasError)        state = 'disconnected';
-        else if (isIncomplete)    state = 'connecting';
-        else if (tunStarted)      state = 'connecting'; // started but no handshake yet
-        else                      state = 'disconnected';
+        else if (hsLostAfterOk)                 state = 'disconnected';
+        else if (hasError)                      state = 'disconnected';
+        else if (isIncomplete)                  state = 'connecting';
+        else if (tunStarted)                    state = 'connecting';
+        else                                    state = 'disconnected';
+
+        // If connected but the tunnel-up line has rotated out of the log,
+        // fill missing connection details from the cache so the info card stays visible.
+        if (state === 'connected' && (!ip || !ep)) {
+            try {
+                var c2 = JSON.parse(localStorage.getItem('wg_cache') || 'null');
+                if (c2) {
+                    if (!ip)          ip          = c2.ip;
+                    if (!ep)          ep          = c2.ep;
+                    if (!httpProxy)   httpProxy   = c2.httpProxy;
+                    if (!socks5Proxy) socks5Proxy = c2.socks5Proxy;
+                }
+            } catch(e) {}
+        }
 
         if (state === 'connected') {
             try { localStorage.setItem('wg_cache', JSON.stringify({ ip: ip, ep: ep, httpProxy: httpProxy, socks5Proxy: socks5Proxy })); } catch(e) {}
         } else if (state === 'disconnected') {
             try { localStorage.removeItem('wg_cache'); } catch(e) {}
-        }
-
-        // Log rotated with no definitive event — fall back to cache
-        if (lastUpIdx === -1 && lastDownIdx === -1 && lastHandshakeOk === -1) {
-            try {
-                var cached = JSON.parse(localStorage.getItem('wg_cache') || 'null');
-                if (cached) return { state: 'connected', ip: cached.ip, endpoint: cached.ep, httpProxy: cached.httpProxy || null, socks5Proxy: cached.socks5Proxy || null };
-            } catch(e) {}
         }
 
         return { state: state, ip: ip, endpoint: ep, httpProxy: httpProxy, socks5Proxy: socks5Proxy };
@@ -803,7 +827,7 @@
             .then(function(data) {
                 var tag = (data.tag_name || '').replace(/^v/, '');
                 if (!tag) return;
-                if (compareVersions(tag, '1.2.8') > 0) {
+                if (compareVersions(tag, '1.2.9') > 0) {
                     document.getElementById('update-version').textContent = 'v' + tag;
                     document.getElementById('update-banner').classList.add('visible');
                     if (btn) btn.textContent = 'Update Available';

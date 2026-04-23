@@ -27,17 +27,20 @@ WORKDIR /opt/app
 # Patch the version placeholder in package.conf
 ARG APPMAJORVERSION=1
 ARG APPMINORVERSION=2
-ARG APPMICROVERSION=8
+ARG APPMICROVERSION=9
 RUN sed -i "s/VER_MAJOR/${APPMAJORVERSION}/g;s/VER_MINOR/${APPMINORVERSION}/g;s/VER_MICRO/${APPMICROVERSION}/g" package.conf
 
 # ACAP 3 firmware expects the settings page at the app root, not in html/
 # hadolint ignore=DL3059
 RUN cp html/index.html index.html
 
-# Build the C parameter bridge and package everything as an ACAP .eap
+# Build the C parameter bridge and package everything as an ACAP .eap,
+# then rename the output to add the _acap3 suffix so it does not clash
+# with the ACAP 4 armv7hf package produced by the main build.
 RUN . /opt/axis/acapsdk/environment-setup* && \
     make && \
-    create-package.sh .
+    create-package.sh . && \
+    for f in WireGuard_VPN_*.eap; do mv "$f" "${f%.eap}_acap3.eap"; done
 
 FROM scratch
-COPY --from=builder /opt/app/*eap /
+COPY --from=builder /opt/app/*acap3.eap /

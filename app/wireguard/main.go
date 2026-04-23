@@ -267,12 +267,17 @@ func (t *tunnel) runHandshakeMonitor() {
 
 	const pollInterval = 15 * time.Second
 	const handshakeMaxAge = 3 * time.Minute
+	// Log a heartbeat every heartbeatEvery polls even without a state change,
+	// so there is always a recent entry in syslog after log rotation.
+	// At 15 s per poll: 20 polls ≈ 5 min between heartbeats.
+	const heartbeatEvery = 20
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	wasConnected := false
 	firstPoll := true
+	pollCount := 0
 
 	for {
 		select {
@@ -304,13 +309,15 @@ func (t *tunnel) runHandshakeMonitor() {
 		}
 
 		connected := !lastHS.IsZero() && time.Since(lastHS) < handshakeMaxAge
-		if connected && (!wasConnected || firstPoll) {
+		heartbeat := pollCount%heartbeatEvery == 0
+		if connected && (!wasConnected || firstPoll || heartbeat) {
 			slog.Info("WireGuard handshake ok", "last_handshake", lastHS.Format(time.RFC3339))
-		} else if !connected && (wasConnected || firstPoll) {
+		} else if !connected && (wasConnected || firstPoll || heartbeat) {
 			slog.Warn("WireGuard handshake lost")
 		}
 		wasConnected = connected
 		firstPoll = false
+		pollCount++
 	}
 }
 
