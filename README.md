@@ -2,7 +2,6 @@
 
 [![Build ACAP packages](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml)
 [![GitHub Super-Linter](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml)
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-orange?style=flat&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/mo3he)
 
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP
 application, enabling secure remote access without requiring any other
@@ -23,6 +22,7 @@ Download the pre-built `.eap` for your camera's architecture from the
 [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest)
 and install via the camera's web interface under **Apps → Add app**.
 
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mo3he)
 
 > **Disclaimer:** This is an independent, community-developed ACAP package and
 > is not an official Axis Communications product. It is not affiliated with,
@@ -228,6 +228,20 @@ Requires Docker. Two separate build scripts cover the two SDK generations.
 ```sh
 cd acap3 && ./build.sh
 ```
+
+## Roadmap
+
+### AXIS OS 13 preparation
+
+AXIS OS 13 (scheduled September 2026) introduces several breaking changes that affect ACAP applications. The following work is needed before this app can support OS 13:
+
+- [ ] **Recompile for 64-bit time (Y2038)** - All ACAP applications must be rebuilt against an updated SDK that uses 64-bit `time_t`. Any device running an incompatible app will roll back the OS 13 upgrade. This affects both the C component (`config_updater.c`) and the Go binary, which must be rebuilt with a Go toolchain that targets the new ABI.
+- [ ] **Sign the application via the ACAP Portal** - OS 13 removes the ability to install unsigned ACAP applications in production. The `.eap` packages will need to go through the official Axis signing process before release.
+- [ ] **Migrate to Manifest Schema v2** - `manifest.json` must be updated to Manifest Schema v2, which includes explicitly declaring the compatible AXIS OS version range. This is required alongside application signing.
+- [ ] **Audit for executable stack** - If any compiled binary uses an executable stack, it must be recompiled with the correct flags before OS 13, which enforces new security restrictions on this.
+- [ ] **Update documentation to HTTPS** - OS 13 enforces HTTPS-only connections by default. All `curl` examples in this README that use `http://` should be updated to use `https://`, or at least note that HTTP must be explicitly re-enabled on the device.
+
+For the full list of OS 13 changes see [AXIS OS 13 breaking changes](https://www.axis.com/for-developers/news/AXIS-OS-13-breaking-changes) and [Changes in AXIS OS 13](https://help.axis.com/en-us/axis-os#changes-in-axis-os-13).
 
 ## Links
 
