@@ -134,7 +134,12 @@ func buildUAPI(cfg *Config) (string, error) {
 		fmt.Fprintf(&sb, "listen_port=%s\n", cfg.ListenPort)
 	}
 	fmt.Fprintf(&sb, "public_key=%s\n", peerHex)
-	fmt.Fprintf(&sb, "allowed_ip=%s\n", cfg.AllowedIPs)
+	for _, cidr := range strings.Split(cfg.AllowedIPs, ",") {
+		cidr = strings.TrimSpace(cidr)
+		if cidr != "" {
+			fmt.Fprintf(&sb, "allowed_ip=%s\n", cidr)
+		}
+	}
 	if cfg.Endpoint != "" {
 		// The WireGuard UAPI requires an IP:port endpoint, not a hostname.
 		// Resolve the hostname here so that DNS names are accepted.
@@ -267,17 +272,12 @@ func (t *tunnel) runHandshakeMonitor() {
 
 	const pollInterval = 15 * time.Second
 	const handshakeMaxAge = 3 * time.Minute
-	// Log a heartbeat every heartbeatEvery polls even without a state change,
-	// so there is always a recent entry in syslog after log rotation.
-	// At 15 s per poll: 20 polls ≈ 5 min between heartbeats.
-	const heartbeatEvery = 20
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	wasConnected := false
 	firstPoll := true
-	pollCount := 0
 
 	for {
 		select {
@@ -309,15 +309,13 @@ func (t *tunnel) runHandshakeMonitor() {
 		}
 
 		connected := !lastHS.IsZero() && time.Since(lastHS) < handshakeMaxAge
-		heartbeat := pollCount%heartbeatEvery == 0
-		if connected && (!wasConnected || firstPoll || heartbeat) {
+		if connected && (!wasConnected || firstPoll) {
 			slog.Info("WireGuard handshake ok", "last_handshake", lastHS.Format(time.RFC3339))
-		} else if !connected && (wasConnected || firstPoll || heartbeat) {
+		} else if !connected && (wasConnected || firstPoll) {
 			slog.Warn("WireGuard handshake lost")
 		}
 		wasConnected = connected
 		firstPoll = false
-		pollCount++
 	}
 }
 
