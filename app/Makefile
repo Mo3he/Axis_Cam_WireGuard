@@ -13,6 +13,7 @@ CFLAGS += -Wall \
           -Werror
 CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(PKGS))
 LIBS   += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(PKGS))
+LDFLAGS += -Wl,-z,noexecstack
 
 all: $(PROGS)
 	$(STRIP) $(PROGS)

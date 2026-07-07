@@ -683,7 +683,7 @@
             // user-configured port (already populated from ACAP params by loadConfig).
             var httpPort   = (document.getElementById('f-httpproxyport').value || '8080').trim();
             var socks5Port = (document.getElementById('f-socks5port').value    || '1080').trim();
-            document.getElementById('d-http').textContent  = 'http://127.0.0.1:' + (r.httpProxy  ? r.httpProxy.split(':').pop()  : httpPort);
+            document.getElementById('d-http').textContent  = '127.0.0.1:' + (r.httpProxy  ? r.httpProxy.split(':').pop()  : httpPort);
             document.getElementById('d-socks').textContent = r.socks5Proxy ? r.socks5Proxy : ('127.0.0.1:' + socks5Port);
             info.style.display = '';
         } else {
@@ -827,7 +827,7 @@
             .then(function(data) {
                 var tag = (data.tag_name || '').replace(/^v/, '');
                 if (!tag) return;
-                if (compareVersions(tag, '1.2.10') > 0) {
+                if (compareVersions(tag, '1.2.11') > 0) {
                     document.getElementById('update-version').textContent = 'v' + tag;
                     document.getElementById('update-banner').classList.add('visible');
                     if (btn) btn.textContent = 'Update Available';

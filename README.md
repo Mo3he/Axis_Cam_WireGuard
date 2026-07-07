@@ -8,14 +8,14 @@ application, enabling secure remote access without requiring any other
 equipment or network configuration. WireGuard achieves this in a secure,
 simple, and lightweight way.
 
-Current version: **1.2.8**
+Current version: **1.2.11**
 
 The app runs entirely in userspace using
 [wireguard-go](https://github.com/WireGuard/wireguard-go) +
 [gVisor netstack](https://gvisor.dev/), which means:
 
 - **No root required** — runs as the standard unprivileged `sdk` ACAP user (ACAP 4 builds)
-- **Compatible with Axis OS 9.x through 12** — see the Compatibility section below
+- **Compatible with Axis OS 9.x through 13** — see the Compatibility section below
 - **No kernel TUN device** — all networking is handled inside the process
 
 Download the pre-built `.eap` for your camera's architecture from the
@@ -40,9 +40,9 @@ and install via the camera's web interface under **Apps → Add app**.
 
 | SDK | Axis OS | Architecture | File |
 |---|---|---|---|
-| ACAP 4 native SDK | 11.11+ (incl. OS 12) | aarch64 | `WireGuard_VPN_1_2_7_aarch64.eap` |
-| ACAP 4 native SDK | 11.11+ (incl. OS 12) | armv7hf | `WireGuard_VPN_1_2_7_armv7hf.eap` |
-| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_7_armv7hf_acap3.eap` |
+| ACAP 4 native SDK | 10.x – 13 | aarch64 | `WireGuard_VPN_1_2_11_aarch64.eap` |
+| ACAP 4 native SDK | 10.x – 13 | armv7hf | `WireGuard_VPN_1_2_11_armv7hf.eap` |
+| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_11_armv7hf_acap3.eap` |
 
 The ACAP 3 build targets older cameras running Axis OS 9.x or 10.x (`EmbeddedDevelopment.Version=2.x`).
 
@@ -50,10 +50,10 @@ To check your camera's OS version and architecture:
 
 ```sh
 curl --digest -u <username>:<password> \
-  'http://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.Firmware.Version'
+  'https://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.Firmware.Version'
 
 curl --digest -u <username>:<password> \
-  'http://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture'
+  'https://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture'
 ```
 
 ## Installing
@@ -68,8 +68,8 @@ and install via the camera's web interface under **Apps → Add app**.
 
 | SDK | Architecture | File |
 |---|---|---|
-| ACAP 4 (OS 11.11+) | aarch64 | `WireGuard_VPN_<version>_aarch64.eap` |
-| ACAP 4 (OS 11.11+) | armv7hf | `WireGuard_VPN_<version>_armv7hf.eap` |
+| ACAP 4 (OS 10.x – 13) | aarch64 | `WireGuard_VPN_<version>_aarch64.eap` |
+| ACAP 4 (OS 10.x – 13) | armv7hf | `WireGuard_VPN_<version>_armv7hf.eap` |
 | ACAP 3 (OS 9.x–10.x) | armv7hf | `WireGuard_VPN_<version>_armv7hf_acap3.eap` |
 
 ## Configuration
@@ -162,7 +162,7 @@ camera credentials can read or write the config.
 
 ```sh
 curl --digest -u admin:password \
-  'http://<camera-ip>/axis-cgi/param.cgi?action=list&group=root.wireguardconfig'
+  'https://<camera-ip>/axis-cgi/param.cgi?action=list&group=root.wireguardconfig'
 ```
 
 Example response:
@@ -187,7 +187,7 @@ curl --digest -u admin:password \
   --data-urlencode 'root.wireguardconfig.ClientIP=10.0.0.2/24' \
   --data-urlencode 'root.wireguardconfig.AllowedIPs=0.0.0.0/0' \
   --data-urlencode 'root.wireguardconfig.ListenPort=51820' \
-  'http://<camera-ip>/axis-cgi/param.cgi'
+  'https://<camera-ip>/axis-cgi/param.cgi'
 ```
 
 The app watches for parameter changes and automatically applies the new config
@@ -210,14 +210,14 @@ curl --digest -u "$USER:$PASS" \
   --data-urlencode "root.wireguardconfig.ClientIP=$(get Address)" \
   --data-urlencode "root.wireguardconfig.AllowedIPs=$(get AllowedIPs)" \
   --data-urlencode "root.wireguardconfig.ListenPort=$(get ListenPort)" \
-  "http://$CAM/axis-cgi/param.cgi"
+  "https://$CAM/axis-cgi/param.cgi"
 ```
 
 ## Building from source
 
 Requires Docker. Two separate build scripts cover the two SDK generations.
 
-**ACAP 4 native SDK** (Axis OS 11.11+, aarch64 + armv7hf):
+**ACAP 4 native SDK** (Axis OS 10.x through 13, aarch64 + armv7hf):
 
 ```sh
 ./build.sh
@@ -233,13 +233,15 @@ cd acap3 && ./build.sh
 
 ### AXIS OS 13 preparation
 
-AXIS OS 13 (scheduled September 2026) introduces several breaking changes that affect ACAP applications. The following work is needed before this app can support OS 13:
+AXIS OS 13 introduces breaking changes that affect ACAP applications. Current status for this project:
 
-- [ ] **Recompile for 64-bit time (Y2038)** - All ACAP applications must be rebuilt against an updated SDK that uses 64-bit `time_t`. Any device running an incompatible app will roll back the OS 13 upgrade. This affects both the C component (`config_updater.c`) and the Go binary, which must be rebuilt with a Go toolchain that targets the new ABI.
-- [ ] **Sign the application via the ACAP Portal** - OS 13 removes the ability to install unsigned ACAP applications in production. The `.eap` packages will need to go through the official Axis signing process before release.
-- [ ] **Migrate to Manifest Schema v2** - `manifest.json` must be updated to Manifest Schema v2, which includes explicitly declaring the compatible AXIS OS version range. This is required alongside application signing.
-- [ ] **Audit for executable stack** - If any compiled binary uses an executable stack, it must be recompiled with the correct flags before OS 13, which enforces new security restrictions on this.
-- [ ] **Update documentation to HTTPS** - OS 13 enforces HTTPS-only connections by default. All `curl` examples in this README that use `http://` should be updated to use `https://`, or at least note that HTTP must be explicitly re-enabled on the device.
+- [x] **Recompile for 64-bit time (Y2038)** - ACAP 4 builds use Native SDK `12.10.0` on Ubuntu `24.04`.
+- [x] **Migrate to Manifest Schema v2** - `manifest.json` uses Schema v2 with `compatibleOsVersions` and an OS 13 max (`13`).
+- [x] **Audit for executable stack** - Packaged `wireguardconfig` and `lib/wireguard-userspace` were checked for both architectures; all report non-executable GNU_STACK (`RW`).
+- [x] **HTTPS-only UI check** - Web UI API calls use relative paths and no hardcoded remote `http://` or `ws://` endpoints.
+- [ ] **Sign via ACAP Portal** - Still required for production install on OS 13.
+
+Note: `compatibleOsVersions` is only enforced from AXIS OS 12.10 onward. Setting `max: 13` (with the SDK's auto `min: 12.10.68`) therefore does not raise the floor for older firmware - devices below 12.10 ignore the field entirely, so the package still installs down to OS 10.x. The declaration exists so OS 12.10-13 devices allow installation rather than blocking it.
 
 For the full list of OS 13 changes see [AXIS OS 13 breaking changes](https://www.axis.com/for-developers/news/AXIS-OS-13-breaking-changes) and [Changes in AXIS OS 13](https://help.axis.com/en-us/axis-os#changes-in-axis-os-13).
 

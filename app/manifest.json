@@ -1,14 +1,19 @@
 {
-    "schemaVersion": "1.7.0",
+    "schemaVersion": "2.0.0",
     "acapPackageConf": {
         "setup": {
             "friendlyName": "WireGuard VPN",
             "appName": "wireguardconfig",
             "vendor": "Mo3he",
-            "embeddedSdkVersion": "3.0",
+            "vendorId": "5741c1fb91",
+            "compatibleOsVersions": [
+                {
+                    "max": "13"
+                }
+            ],
             "vendorUrl": "https://github.com/Mo3he/Axis_Cam_WireGuard",
             "runMode": "respawn",
-            "version": "1.2.10",
+            "version": "1.2.11",
             "user": {
                 "group": "sdk",
                 "username": "sdk"
