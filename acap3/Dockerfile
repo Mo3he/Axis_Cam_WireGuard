@@ -27,7 +27,7 @@ WORKDIR /opt/app
 # Patch the version placeholder in package.conf
 ARG APPMAJORVERSION=1
 ARG APPMINORVERSION=2
-ARG APPMICROVERSION=10
+ARG APPMICROVERSION=11
 RUN sed -i "s/VER_MAJOR/${APPMAJORVERSION}/g;s/VER_MINOR/${APPMINORVERSION}/g;s/VER_MICRO/${APPMICROVERSION}/g" package.conf
 
 # ACAP 3 firmware expects the settings page at the app root, not in html/
