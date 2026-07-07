@@ -37,7 +37,7 @@ supported by the WireGuard project.
 
 ## MIT License (wireguard-go)
 
-```
+```text
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -59,7 +59,7 @@ SOFTWARE.
 
 ## BSD 3-Clause License (golang.org/x)
 
-```
+```text
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
 
