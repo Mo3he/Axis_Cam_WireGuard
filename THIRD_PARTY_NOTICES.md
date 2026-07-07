@@ -12,26 +12,26 @@ supported by the WireGuard project.
 ## wireguard-go
 
 - Copyright (c) Jason A. Donenfeld and contributors
-- Project: https://git.zx2c4.com/wireguard-go / https://golang.zx2c4.com/wireguard
+- Project: <https://git.zx2c4.com/wireguard-go> / <https://golang.zx2c4.com/wireguard>
 - License: MIT
 
 ## gVisor (netstack)
 
 - Copyright (c) The gVisor Authors
-- Project: https://gvisor.dev/
-- License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+- Project: <https://gvisor.dev/>
+- License: Apache License 2.0 (<https://www.apache.org/licenses/LICENSE-2.0>)
 
 ## golang.org/x supplementary packages (crypto, net, sys, time)
 
 - Copyright (c) 2009 The Go Authors
-- Project: https://cs.opensource.google/go/x/crypto (and siblings)
+- Project: <https://cs.opensource.google/go/x/crypto> (and siblings)
 - License: BSD 3-Clause
 
 ## google/btree
 
 - Copyright (c) 2014 Google Inc.
-- Project: https://github.com/google/btree
-- License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+- Project: <https://github.com/google/btree>
+- License: Apache License 2.0 (<https://www.apache.org/licenses/LICENSE-2.0>)
 
 --------------------------------------------------------------------------------
 
@@ -85,4 +85,4 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
 The Apache License 2.0 (gVisor, google/btree) is available at
-https://www.apache.org/licenses/LICENSE-2.0.
+<https://www.apache.org/licenses/LICENSE-2.0>.
