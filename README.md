@@ -22,7 +22,8 @@ Download the pre-built `.eap` for your camera's architecture from the
 [latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest)
 and install via the camera's web interface under **Apps → Add app**.
 
-[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mo3he)
+[![Sponsor](https://img.shields.io/badge/Sponsor%20My%20Work-grey?logo=github)](https://github.com/sponsors/Mo3he)  
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-grey?style=flat&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/mo3he)
 
 > **Disclaimer:** This is an independent, community-developed ACAP package and
 > is not an official Axis Communications product. It is not affiliated with,
