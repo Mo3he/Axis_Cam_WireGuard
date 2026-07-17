@@ -1,34 +1,20 @@
-# WireGuard VPN ACAP
+# WireGuard ACAP for Axis Cameras
 
-[![Build ACAP packages](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml)
-[![GitHub Super-Linter](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml)
+[![Release](https://img.shields.io/github/v/release/Mo3he/Axis_Cam_WireGuard?style=flat)](https://github.com/Mo3he/Axis_Cam_WireGuard/releases)
+[![License](https://img.shields.io/github/license/Mo3he/Axis_Cam_WireGuard?style=flat)](LICENSE)
+[![Build](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/build.yml)
+[![Super-Linter](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml/badge.svg)](https://github.com/Mo3he/Axis_Cam_WireGuard/actions/workflows/super-linter.yml)
+[![Sponsor](https://img.shields.io/badge/Sponsor%20My%20Work-EA4AAA?style=flat&logo=github&logoColor=white)](https://github.com/sponsors/Mo3he)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/mo3he)
 
 A WireGuard VPN client that runs directly on Axis cameras as an ACAP
-application, enabling secure remote access without requiring any other
-equipment or network configuration. WireGuard achieves this in a secure,
-simple, and lightweight way.
+application, enabling secure remote access without requiring any other equipment
+or network configuration. WireGuard achieves this in a secure, simple, and
+lightweight way.
 
-Current version: **1.2.11**
-
-The app runs entirely in userspace using
-[wireguard-go](https://github.com/WireGuard/wireguard-go) +
-[gVisor netstack](https://gvisor.dev/), which means:
-
-- **No root required** — runs as the standard unprivileged `sdk` ACAP user (ACAP 4 builds)
-- **Compatible with Axis OS 9.x through 13** — see the Compatibility section below
-- **No kernel TUN device** — all networking is handled inside the process
-
-Download the pre-built `.eap` for your camera's architecture from the
-[latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest)
-and install via the camera's web interface under **Apps → Add app**.
-
-[![Sponsor](https://img.shields.io/badge/Sponsor%20My%20Work-grey?logo=github)](https://github.com/sponsors/Mo3he)  
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-grey?style=flat&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/mo3he)
-
-> **Disclaimer:** This is an independent, community-developed ACAP package and
-> is not an official Axis Communications product. It is not affiliated with,
-> endorsed by, or supported by Axis Communications AB. Use it at your own risk.
-> For official Axis software, visit [axis.com](https://www.axis.com/).
+> **Disclaimer:** Independent, community-developed ACAP package. Not an official
+> Axis product and not affiliated with, endorsed by, or supported by Axis
+> Communications AB or the WireGuard project. Use at your own risk.
 
 > **WireGuard Notice:** WireGuard is a registered trademark of Jason A.
 > Donenfeld. This package independently redistributes
@@ -37,31 +23,48 @@ and install via the camera's web interface under **Apps → Add app**.
 > supported by the WireGuard project or Jason A. Donenfeld. For the official
 > WireGuard project, visit [wireguard.com](https://www.wireguard.com).
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Compatibility](#compatibility)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Config API](#config-api)
+- [Ports & security](#ports--security)
+- [How it works](#how-it-works)
+- [Build from source](#build-from-source)
+- [Roadmap](#roadmap)
+- [Links](#links)
+- [License](#license)
+
+## Overview
+
+The app runs entirely in userspace using
+[wireguard-go](https://github.com/WireGuard/wireguard-go) +
+[gVisor netstack](https://gvisor.dev/), which means:
+
+- **No root required:** runs as the standard unprivileged `sdk` ACAP user (ACAP
+  4 builds).
+- **Compatible with AXIS OS 9.x through 13:** see the Compatibility section
+  below.
+- **No kernel TUN device:** all networking is handled inside the process.
+
 ## Compatibility
 
-| SDK | Axis OS | Architecture | File |
+| Build | AXIS OS | Architecture | Notes |
 |---|---|---|---|
-| ACAP 4 native SDK | 10.x – 13 | aarch64 | `WireGuard_VPN_1_2_11_aarch64.eap` |
-| ACAP 4 native SDK | 10.x – 13 | armv7hf | `WireGuard_VPN_1_2_11_armv7hf.eap` |
-| ACAP 3 SDK | 9.x – 10.x | armv7hf | `WireGuard_VPN_1_2_11_armv7hf_acap3.eap` |
+| ACAP 4 (native SDK) | 10.x – 13 | aarch64 | Standard build |
+| ACAP 4 (native SDK) | 10.x – 13 | armv7hf | Standard build |
+| ACAP 3 (legacy SDK) | 9.x – 10.x | armv7hf | Legacy cameras (`EmbeddedDevelopment.Version=2.x`) |
 
-The ACAP 3 build targets older cameras running Axis OS 9.x or 10.x (`EmbeddedDevelopment.Version=2.x`).
+> Most cameras use the **ACAP 4** build. Use the **ACAP 3** build only on legacy
+> cameras that don't support ACAP 4 (typically AXIS OS 9–10).
 
-To check your camera's OS version and architecture:
-
-```sh
-curl --digest -u <username>:<password> \
-  'https://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.Firmware.Version'
-
-curl --digest -u <username>:<password> \
-  'https://<device-ip>/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture'
-```
-
-## Installing
+## Installation
 
 Download the `.eap` for your camera from the
-[latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest)
-and install via the camera's web interface under **Apps → Add app**.
+[latest release](https://github.com/Mo3he/Axis_Cam_WireGuard/releases/latest) and
+install via the camera's web interface under **Apps -> Add app**.
 
 > [!NOTE]
 > EAP files are not included in the repository. Always download from the
@@ -71,7 +74,7 @@ and install via the camera's web interface under **Apps → Add app**.
 |---|---|---|
 | ACAP 4 (OS 10.x – 13) | aarch64 | `WireGuard_VPN_<version>_aarch64.eap` |
 | ACAP 4 (OS 10.x – 13) | armv7hf | `WireGuard_VPN_<version>_armv7hf.eap` |
-| ACAP 3 (OS 9.x–10.x) | armv7hf | `WireGuard_VPN_<version>_armv7hf_acap3.eap` |
+| ACAP 3 (OS 9.x – 10.x) | armv7hf | `WireGuard_VPN_<version>_armv7hf_acap3.eap` |
 
 ## Configuration
 
@@ -81,19 +84,19 @@ Open the app's settings page in the camera web UI and fill in:
 |---|---|
 | **Private Key** | Your WireGuard private key for this camera (keep secret) |
 | **Listen Port** | Local UDP port (leave blank for random, or use 51820) |
-| **Endpoint** | WireGuard server address and port — e.g. `vpn.example.com:51820` |
+| **Endpoint** | WireGuard server address and port, e.g. `vpn.example.com:51820` |
 | **Peer Public Key** | Public key of your WireGuard server |
 | **Allowed IPs** | Routes to send through the VPN (default: `0.0.0.0/0` for all traffic) |
-| **Client IP** | This camera's IP address on the VPN network — e.g. `10.0.0.2/24` |
+| **Client IP** | This camera's IP address on the VPN network, e.g. `10.0.0.2/24` |
 | **HTTP Proxy Port** | Port for the HTTP CONNECT proxy on localhost (default: `8080`) |
 | **Outbound SOCKS5 Port** | Port for the outbound SOCKS5 proxy on localhost (default: `1080`) |
 
-The Private Key field will appear blank when you revisit the settings — this is
-expected behaviour for password-type parameters. The key is saved securely.
+The Private Key field will appear blank when you revisit the settings, this is
+expected behavior for password-type parameters. The key is saved securely.
 
 > [!TIP]
-> Click **Import .conf** on the settings page to load all fields from a
-> standard WireGuard `.conf` file at once.
+> Click **Import .conf** on the settings page to load all fields from a standard
+> WireGuard `.conf` file at once.
 
 ### Generating keys
 
@@ -113,51 +116,11 @@ PublicKey = <camera-public.key contents>
 AllowedIPs = 10.0.0.2/32
 ```
 
-## How it works
-
-Once connected, three proxy services start on the camera:
-
-| Service | Default address | Purpose |
-|---|---|---|
-| **HTTP CONNECT proxy** | `http://127.0.0.1:<HTTPProxyPort>` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
-| **Outbound SOCKS5** | `127.0.0.1:<OutboundSOCKS5Port>` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
-| **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
-
-The HTTP proxy and outbound SOCKS5 ports are user-configurable in the settings
-(defaults: `8080` and `1080`). If the configured port is already in use by
-another application, the proxy will fail to start and log an error — change the
-port in settings to resolve the conflict. The actual bound addresses are shown
-in the connection details panel in the UI.
-
-### Saving config
-
-Click **Save** in the UI — the app stops the tunnel, applies the new config,
-and restarts within a few seconds. All six fields are saved as a single
-operation so only one restart occurs.
-
-### Routing outbound camera traffic through WireGuard
-
-**Global HTTP/HTTPS proxy** — set in **System → Network → Global proxies**:
-
-```ini
-HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
-HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
-```
-
-**Built-in MQTT client** — set in **System → MQTT → Broker**:
-
-```ini
-HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
-HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
-```
-
-**ACAP apps / services using SOCKS5** — set their proxy to `127.0.0.1:<OutboundSOCKS5Port>`.
-
 ## Config API
 
 The app exposes its configuration entirely through the standard VAPIX
-`param.cgi` endpoint — no custom API server required. Any HTTP client with
-camera credentials can read or write the config.
+`param.cgi` endpoint, with no custom API server required. Any HTTP client with camera
+credentials can read or write the config.
 
 ### Read current config
 
@@ -191,8 +154,8 @@ curl --digest -u admin:password \
   'https://<camera-ip>/axis-cgi/param.cgi'
 ```
 
-The app watches for parameter changes and automatically applies the new config
-— no restart required. A successful update returns `OK`.
+The app watches for parameter changes and automatically applies the new config,
+no restart required. A successful update returns `OK`.
 
 ### Push config from a `.conf` file (shell helper)
 
@@ -214,17 +177,63 @@ curl --digest -u "$USER:$PASS" \
   "https://$CAM/axis-cgi/param.cgi"
 ```
 
-## Building from source
+## Ports & security
+
+| Service | Default address | Purpose |
+|---|---|---|
+| **HTTP CONNECT proxy** | `http://127.0.0.1:<HTTPProxyPort>` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
+| **Outbound SOCKS5** | `127.0.0.1:<OutboundSOCKS5Port>` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
+| **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
+
+> **Security:** the inbound SOCKS5 proxy is bound to the tunnel IP and is
+> therefore reachable by any WireGuard peer. Restrict access with your VPN's own
+> peer allow-lists, and keep the camera behind its normal authentication.
+
+## How it works
+
+Once connected, three proxy services start on the camera (see the ports table
+above). The HTTP proxy and outbound SOCKS5 ports are user-configurable in the
+settings (defaults: `8080` and `1080`). If the configured port is already in use
+by another application, the proxy will fail to start and log an error; change
+the port in settings to resolve the conflict. The actual bound addresses are
+shown in the connection details panel in the UI.
+
+### Saving config
+
+Click **Save** in the UI; the app stops the tunnel, applies the new config, and
+restarts within a few seconds. All six fields are saved as a single operation so
+only one restart occurs.
+
+### Routing outbound camera traffic through WireGuard
+
+**Global HTTP/HTTPS proxy:** set in **System -> Network -> Global proxies**:
+
+```ini
+HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
+HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
+```
+
+**Built-in MQTT client:** set in **System -> MQTT -> Broker**:
+
+```ini
+HTTP proxy:  http://127.0.0.1:<HTTPProxyPort>
+HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
+```
+
+**ACAP apps / services using SOCKS5:** set their proxy to
+`127.0.0.1:<OutboundSOCKS5Port>`.
+
+## Build from source
 
 Requires Docker. Two separate build scripts cover the two SDK generations.
 
-**ACAP 4 native SDK** (Axis OS 10.x through 13, aarch64 + armv7hf):
+**ACAP 4 native SDK** (AXIS OS 10.x through 13, aarch64 + armv7hf):
 
 ```sh
 ./build.sh
 ```
 
-**ACAP 3 SDK** (Axis OS 9.x – 10.x, armv7hf only):
+**ACAP 3 SDK** (AXIS OS 9.x – 10.x, armv7hf only):
 
 ```sh
 cd acap3 && ./build.sh
@@ -234,19 +243,38 @@ cd acap3 && ./build.sh
 
 ### AXIS OS 13 preparation
 
-AXIS OS 13 introduces breaking changes that affect ACAP applications. Current status for this project:
+AXIS OS 13 introduces breaking changes that affect ACAP applications. Current
+status for this project:
 
-- [x] **Recompile for 64-bit time (Y2038)** - ACAP 4 builds use Native SDK `12.10.0` on Ubuntu `24.04`.
-- [x] **Migrate to Manifest Schema v2** - `manifest.json` uses Schema v2 with `compatibleOsVersions` and an OS 13 max (`13`).
-- [x] **Audit for executable stack** - Packaged `wireguardconfig` and `lib/wireguard-userspace` were checked for both architectures; all report non-executable GNU_STACK (`RW`).
-- [x] **HTTPS-only UI check** - Web UI API calls use relative paths and no hardcoded remote `http://` or `ws://` endpoints.
+- [x] **Recompile for 64-bit time (Y2038)** - ACAP 4 builds use Native SDK
+  `12.10.0` on Ubuntu `24.04`.
+- [x] **Migrate to Manifest Schema v2** - `manifest.json` uses Schema v2 with
+  `compatibleOsVersions` and an OS 13 max (`13`).
+- [x] **Audit for executable stack** - Packaged `wireguardconfig` and
+  `lib/wireguard-userspace` were checked for both architectures; all report
+  non-executable GNU_STACK (`RW`).
+- [x] **HTTPS-only UI check** - Web UI API calls use relative paths and no
+  hardcoded remote `http://` or `ws://` endpoints.
 - [ ] **Sign via ACAP Portal** - Still required for production install on OS 13.
 
-Note: `compatibleOsVersions` is only enforced from AXIS OS 12.10 onward. Setting `max: 13` (with the SDK's auto `min: 12.10.68`) therefore does not raise the floor for older firmware - devices below 12.10 ignore the field entirely, so the package still installs down to OS 10.x. The declaration exists so OS 12.10-13 devices allow installation rather than blocking it.
+Note: `compatibleOsVersions` is only enforced from AXIS OS 12.10 onward. Setting
+`max: 13` (with the SDK's auto `min: 12.10.68`) therefore does not raise the floor
+for older firmware, devices below 12.10 ignore the field entirely, so the
+package still installs down to OS 10.x.
 
-For the full list of OS 13 changes see [AXIS OS 13 breaking changes](https://www.axis.com/for-developers/news/AXIS-OS-13-breaking-changes) and [Changes in AXIS OS 13](https://help.axis.com/en-us/axis-os#changes-in-axis-os-13).
+For the full list of OS 13 changes see
+[AXIS OS 13 breaking changes](https://www.axis.com/for-developers/news/AXIS-OS-13-breaking-changes)
+and [Changes in AXIS OS 13](https://help.axis.com/en-us/axis-os#changes-in-axis-os-13).
 
 ## Links
 
-- <https://www.wireguard.com/>
-- <https://www.axis.com/>
+- [WireGuard](https://www.wireguard.com/)
+- [wireguard-go](https://github.com/WireGuard/wireguard-go)
+- [Axis Communications](https://www.axis.com/)
+
+## License
+
+The packaging code in this repository is licensed under BSD 3-Clause (see
+[LICENSE](LICENSE)). Bundled upstream components (wireguard-go, gVisor,
+golang.org/x, btree) are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
