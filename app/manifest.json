@@ -4,8 +4,8 @@
         "setup": {
             "friendlyName": "WireGuard VPN",
             "appName": "wireguardconfig",
-            "vendor": "Mo3he",
-            "vendorId": "5741c1fb91",
+            "vendor": "moshe@mohome.net",
+            "vendorId": "70ee172dd9",
             "compatibleOsVersions": [
                 {
                     "max": "13"
