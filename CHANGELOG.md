@@ -5,6 +5,19 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.12] - 2026-07-24 - Save settings on recorder / access-control devices
+
+- Fix: settings can now be saved on Axis devices that do not expose
+  `/axis-cgi/param.cgi`, such as recorder/NVR products (e.g. S3008) and
+  access-control controllers (e.g. A1610, A1710, A1810). The web UI previously
+  appeared unable to persist configuration on those devices.
+- The app now exposes a small settings endpoint at
+  `/local/wireguardconfig/api/settings` through a manifest reverse-proxy. The
+  web UI uses `param.cgi` when available and transparently falls back to this
+  endpoint when it is not, writing configuration through the ACAP parameter
+  store. The embedded server listens on port 2203 to stay clear of the other
+  VPN ACAPs' settings servers.
+
 ## [1.2.11-Signed] - 2026-07-21 - WireGuard VPN 1.2.11 (Signed)
 
 - Packages are now signed with the Axis ACAP signing service and install

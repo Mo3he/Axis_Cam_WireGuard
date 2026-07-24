@@ -19,6 +19,7 @@
 #include <axsdk/axparameter.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <gio/gio.h>
 #include <glib-unix.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -34,6 +35,11 @@
 #define APP_NAME "wireguardconfig"
 #define CONFIG_FILE "/usr/local/packages/wireguardconfig/config.txt"
 #define WG_BINARY "/usr/local/packages/wireguardconfig/lib/wireguard-userspace"
+/* Localhost port for the settings fallback HTTP server. Must be unique per ACAP:
+ * several of these VPN apps can run on the same device at once, and a shared
+ * port would make one app's reverseProxy hit another app's server. Registry:
+ * Tailscale 2201, ZeroTier 2202, WireGuard 2203, OpenVPN 2204. */
+#define HTTP_PORT 2203
 
 static pid_t wg_pid = -1;
 static guint reload_timer_id = 0;
@@ -219,6 +225,238 @@ static void parameter_changed(const gchar *name, const gchar *value, gpointer G_
     reload_timer_id = g_timeout_add(300, debounced_restart, NULL);
 }
 
+/* ── settings fallback HTTP server (127.0.0.1:HTTP_PORT) ─────────────────────
+ * Serves GET/POST /api/settings so the web UI can read and write the ACAP
+ * parameters directly on devices that do not expose /axis-cgi/param.cgi
+ * (e.g. recorder/NVR and access-control products). */
+
+static const char *http_param_names[] = {
+    "PrivateKey", "ListenPort", "Endpoint", "PeerPublicKey",
+    "AllowedIPs", "ClientIP", "HTTPProxyPort", "OutboundSOCKS5Port"
+};
+
+static int http_is_known_param(const char *name) {
+    for (size_t i = 0; i < G_N_ELEMENTS(http_param_names); i++)
+        if (strcmp(name, http_param_names[i]) == 0) return 1;
+    return 0;
+}
+
+static void http_cache_set_by_name(const char *name, const char *value) {
+    if      (strcmp(name, "PrivateKey")         == 0) cache_set(&cfg_private_key,      value);
+    else if (strcmp(name, "ListenPort")         == 0) cache_set(&cfg_listen_port,      value);
+    else if (strcmp(name, "Endpoint")           == 0) cache_set(&cfg_endpoint,         value);
+    else if (strcmp(name, "PeerPublicKey")      == 0) cache_set(&cfg_peer_pub_key,     value);
+    else if (strcmp(name, "AllowedIPs")         == 0) cache_set(&cfg_allowed_ips,      value);
+    else if (strcmp(name, "ClientIP")           == 0) cache_set(&cfg_client_ip,        value);
+    else if (strcmp(name, "HTTPProxyPort")      == 0) cache_set(&cfg_http_proxy_port,  value);
+    else if (strcmp(name, "OutboundSOCKS5Port") == 0) cache_set(&cfg_socks5_port,      value);
+}
+
+static void http_json_append_escaped(GString *out, const char *s) {
+    for (const char *p = s; *p; p++) {
+        switch (*p) {
+            case '"':  g_string_append(out, "\\\""); break;
+            case '\\': g_string_append(out, "\\\\"); break;
+            case '\n': g_string_append(out, "\\n");  break;
+            case '\r': g_string_append(out, "\\r");  break;
+            case '\t': g_string_append(out, "\\t");  break;
+            default:
+                if ((unsigned char)*p < 0x20)
+                    g_string_append_printf(out, "\\u%04x", (unsigned char)*p);
+                else
+                    g_string_append_c(out, *p);
+        }
+    }
+}
+
+static gchar *http_build_settings_json(void) {
+    GString *out = g_string_new("{");
+    for (size_t i = 0; i < G_N_ELEMENTS(http_param_names); i++) {
+        gchar *val = NULL;
+        GError *err = NULL;
+        if (!g_ax_handle ||
+            !ax_parameter_get(g_ax_handle, http_param_names[i], &val, &err)) {
+            if (err) g_error_free(err);
+            val = g_strdup("");
+        }
+        if (i) g_string_append_c(out, ',');
+        g_string_append_printf(out, "\"%s\":\"", http_param_names[i]);
+        http_json_append_escaped(out, val ? val : "");
+        g_string_append_c(out, '"');
+        g_free(val);
+    }
+    g_string_append_c(out, '}');
+    /* Copy out and fully free: g_string_free(out, FALSE) is inlined by newer glib
+     * headers into g_string_free_and_steal(), absent on older runtimes. */
+    gchar *json_result = g_strdup(out->str);
+    g_string_free(out, TRUE);
+    return json_result;
+}
+
+static gchar *http_url_decode(const char *s, size_t len) {
+    GString *out = g_string_new(NULL);
+    for (size_t i = 0; i < len; i++) {
+        char c = s[i];
+        if (c == '+') {
+            g_string_append_c(out, ' ');
+        } else if (c == '%' && i + 2 < len &&
+                   g_ascii_isxdigit(s[i + 1]) && g_ascii_isxdigit(s[i + 2])) {
+            int hi = g_ascii_xdigit_value(s[i + 1]);
+            int lo = g_ascii_xdigit_value(s[i + 2]);
+            g_string_append_c(out, (char)((hi << 4) | lo));
+            i += 2;
+        } else {
+            g_string_append_c(out, c);
+        }
+    }
+    gchar *decoded = g_strdup(out->str);
+    g_string_free(out, TRUE);
+    return decoded;
+}
+
+/* Apply a urlencoded body of Name=value pairs. Returns the number applied. */
+static int http_apply_settings(const char *body, size_t len) {
+    int applied = 0;
+    size_t start = 0;
+    for (size_t i = 0; i <= len; i++) {
+        if (i == len || body[i] == '&') {
+            size_t seg_len = i - start;
+            if (seg_len > 0) {
+                const char *seg = body + start;
+                const char *eq = memchr(seg, '=', seg_len);
+                if (eq) {
+                    size_t nlen = (size_t)(eq - seg);
+                    gchar *name = g_strndup(seg, nlen);
+                    gchar *value = http_url_decode(eq + 1, seg_len - nlen - 1);
+                    if (http_is_known_param(name) && g_ax_handle) {
+                        GError *err = NULL;
+                        if (ax_parameter_set(g_ax_handle, name, value, TRUE, &err)) {
+                            http_cache_set_by_name(name, value);
+                            applied++;
+                        } else {
+                            syslog(LOG_WARNING, "http set %s failed: %s",
+                                   name, err ? err->message : "unknown");
+                            if (err) g_error_free(err);
+                        }
+                    }
+                    g_free(name);
+                    g_free(value);
+                }
+            }
+            start = i + 1;
+        }
+    }
+    return applied;
+}
+
+static size_t http_content_length(const char *hdr, size_t hlen) {
+    const char *key = "content-length:";
+    size_t klen = strlen(key);
+    for (size_t i = 0; i + klen <= hlen; i++) {
+        if (g_ascii_strncasecmp(hdr + i, key, klen) == 0) {
+            i += klen;
+            while (i < hlen && (hdr[i] == ' ' || hdr[i] == '\t')) i++;
+            return (size_t)strtoul(hdr + i, NULL, 10);
+        }
+    }
+    return 0;
+}
+
+static void http_send(GOutputStream *out, const char *status,
+                      const char *ctype, const char *body) {
+    gchar *resp = g_strdup_printf(
+        "HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
+        "Connection: close\r\n\r\n%s",
+        status, ctype, strlen(body), body);
+    g_output_stream_write_all(out, resp, strlen(resp), NULL, NULL, NULL);
+    g_free(resp);
+}
+
+static gboolean http_on_incoming(GSocketService *service G_GNUC_UNUSED,
+                                 GSocketConnection *connection,
+                                 GObject *source G_GNUC_UNUSED,
+                                 gpointer user_data G_GNUC_UNUSED) {
+    GInputStream  *in  = g_io_stream_get_input_stream(G_IO_STREAM(connection));
+    GOutputStream *out = g_io_stream_get_output_stream(G_IO_STREAM(connection));
+
+    GString *req = g_string_new(NULL);
+    char buf[2048];
+    int have_headers = 0;
+    size_t header_end = 0, content_length = 0;
+
+    while (1) {
+        gssize n = g_input_stream_read(in, buf, sizeof(buf), NULL, NULL);
+        if (n <= 0) break;
+        g_string_append_len(req, buf, n);
+        if (!have_headers) {
+            char *p = g_strstr_len(req->str, req->len, "\r\n\r\n");
+            if (p) {
+                have_headers = 1;
+                header_end = (size_t)(p - req->str) + 4;
+                content_length = http_content_length(req->str, header_end);
+            }
+        }
+        if (have_headers && req->len - header_end >= content_length) break;
+        if (req->len > 262144) break; /* safety cap */
+    }
+
+    int is_get = g_str_has_prefix(req->str, "GET ");
+    int is_post = g_str_has_prefix(req->str, "POST ");
+    int is_settings = 0;
+    const char *sp1 = strchr(req->str, ' ');
+    if (sp1) {
+        const char *path = sp1 + 1;
+        const char *sp2 = strchr(path, ' ');
+        size_t plen = sp2 ? (size_t)(sp2 - path) : strlen(path);
+        const char *q = memchr(path, '?', plen);
+        size_t mlen = q ? (size_t)(q - path) : plen;
+        if (mlen >= 8 && g_ascii_strncasecmp(path + mlen - 8, "settings", 8) == 0)
+            is_settings = 1;
+    }
+
+    if (is_settings && is_get) {
+        gchar *json = http_build_settings_json();
+        http_send(out, "200 OK", "application/json", json);
+        g_free(json);
+    } else if (is_settings && is_post) {
+        const char *body = req->str + header_end;
+        size_t body_len = req->len - header_end;
+        if (body_len > content_length) body_len = content_length;
+        int applied = http_apply_settings(body, body_len);
+        syslog(LOG_INFO, "settings http: applied %d parameter(s)", applied);
+        if (reload_timer_id) g_source_remove(reload_timer_id);
+        reload_timer_id = g_timeout_add(300, debounced_restart, NULL);
+        http_send(out, "200 OK", "text/plain", "OK");
+    } else {
+        http_send(out, "404 Not Found", "text/plain", "Not found");
+    }
+
+    g_string_free(req, TRUE);
+    g_io_stream_close(G_IO_STREAM(connection), NULL, NULL);
+    return TRUE;
+}
+
+static void http_server_start(void) {
+    GError *err = NULL;
+    GSocketService *service = g_socket_service_new();
+    GInetAddress   *addr    = g_inet_address_new_from_string("127.0.0.1");
+    GSocketAddress *saddr   = g_inet_socket_address_new(addr, HTTP_PORT);
+    if (!g_socket_listener_add_address(G_SOCKET_LISTENER(service), saddr,
+                                       G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_TCP,
+                                       NULL, NULL, &err)) {
+        syslog(LOG_WARNING, "settings http: bind 127.0.0.1:%d failed: %s", HTTP_PORT,
+               err ? err->message : "unknown");
+        if (err) g_error_free(err);
+        g_object_unref(service);
+    } else {
+        g_signal_connect(service, "incoming", G_CALLBACK(http_on_incoming), NULL);
+        g_socket_service_start(service);
+        syslog(LOG_INFO, "settings http server on 127.0.0.1:%d", HTTP_PORT);
+    }
+    g_object_unref(addr);
+    g_object_unref(saddr);
+}
+
 /* ── signal handler ───────────────────────────────────────────────────────── */
 
 static gboolean signal_handler(gpointer loop) {
@@ -272,6 +510,8 @@ int main(void) {
     g_unix_signal_add(SIGTERM, signal_handler, loop);
     g_unix_signal_add(SIGINT, signal_handler, loop);
     g_timeout_add_seconds(60, watchdog_cb, NULL);
+
+    http_server_start();
 
     syslog(LOG_INFO, "running — waiting for parameter changes");
     g_main_loop_run(loop);

@@ -697,28 +697,45 @@
             ('0'+now.getSeconds()).slice(-2);
     }
 
-    // ── Load config from param.cgi ──────────────────────────────────────────
+    // ── Load config: param.cgi when available, else the app endpoint ────────
+    // On devices that do not serve /axis-cgi/param.cgi (e.g. recorder/NVR and
+    // access-control products) the UI falls back to the app's own settings
+    // endpoint, exposed through the manifest reverseProxy.
+    var API_URL = 'api/settings';
+
+    function applyConfig(get) {
+        document.getElementById('f-privatekey').value  = get('PrivateKey');
+        document.getElementById('f-listenport').value  = get('ListenPort');
+        document.getElementById('f-endpoint').value    = get('Endpoint');
+        document.getElementById('f-peerpubkey').value  = get('PeerPublicKey');
+        document.getElementById('f-allowedips').value  = get('AllowedIPs');
+        document.getElementById('f-clientip').value    = get('ClientIP');
+        document.getElementById('f-httpproxyport').value = get('HTTPProxyPort') || '8080';
+        document.getElementById('f-socks5port').value    = get('OutboundSOCKS5Port') || '1080';
+        updatePubkeyDisplay();
+    }
+
     function loadConfig() {
         fetch(PARAM_URL + '?action=list&group=root.' + APP, {
             cache: 'no-store', credentials: 'same-origin'
         })
-        .then(function(r) { return r.text(); })
+        .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
         .then(function(txt) {
-            function getParam(name) {
+            if (!/(?:^|\.)(PrivateKey|ListenPort|Endpoint)=/m.test(txt)) return Promise.reject();
+            applyConfig(function(name) {
                 var m = txt.match(new RegExp(name + '=(.*)'));
                 return m ? m[1].trim() : '';
-            }
-            document.getElementById('f-privatekey').value  = getParam('PrivateKey');
-            document.getElementById('f-listenport').value  = getParam('ListenPort');
-            document.getElementById('f-endpoint').value    = getParam('Endpoint');
-            document.getElementById('f-peerpubkey').value  = getParam('PeerPublicKey');
-            document.getElementById('f-allowedips').value  = getParam('AllowedIPs');
-            document.getElementById('f-clientip').value    = getParam('ClientIP');
-            document.getElementById('f-httpproxyport').value = getParam('HTTPProxyPort') || '8080';
-            document.getElementById('f-socks5port').value    = getParam('OutboundSOCKS5Port') || '1080';
-            updatePubkeyDisplay();
+            });
         })
-        .catch(function() {});
+        .catch(function() {
+            fetch(API_URL + '?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(obj) {
+                    if (!obj) return;
+                    applyConfig(function(name) { return typeof obj[name] === 'string' ? obj[name] : ''; });
+                })
+                .catch(function() {});
+        });
     }
 
     // ── Save config to param.cgi ───────────────────────────────────────────
@@ -743,34 +760,44 @@
     saveBtn.addEventListener('click', function() {
         saveBtn.disabled = true;
         setMsg('Saving…');
-        var body = [
-            'action=update',
-            'root.' + APP + '.PrivateKey='    + encodeURIComponent(document.getElementById('f-privatekey').value.trim()),
-            'root.' + APP + '.ListenPort='    + encodeURIComponent(document.getElementById('f-listenport').value.trim()),
-            'root.' + APP + '.Endpoint='      + encodeURIComponent(document.getElementById('f-endpoint').value.trim()),
-            'root.' + APP + '.PeerPublicKey=' + encodeURIComponent(document.getElementById('f-peerpubkey').value.trim()),
-            'root.' + APP + '.AllowedIPs='           + encodeURIComponent(document.getElementById('f-allowedips').value.trim()),
-            'root.' + APP + '.ClientIP='              + encodeURIComponent(document.getElementById('f-clientip').value.trim()),
-            'root.' + APP + '.HTTPProxyPort='         + encodeURIComponent(document.getElementById('f-httpproxyport').value.trim() || '8080'),
-            'root.' + APP + '.OutboundSOCKS5Port='    + encodeURIComponent(document.getElementById('f-socks5port').value.trim() || '1080')
-        ].join('&');
+        var vals = {
+            PrivateKey:         document.getElementById('f-privatekey').value.trim(),
+            ListenPort:         document.getElementById('f-listenport').value.trim(),
+            Endpoint:           document.getElementById('f-endpoint').value.trim(),
+            PeerPublicKey:      document.getElementById('f-peerpubkey').value.trim(),
+            AllowedIPs:         document.getElementById('f-allowedips').value.trim(),
+            ClientIP:           document.getElementById('f-clientip').value.trim(),
+            HTTPProxyPort:      document.getElementById('f-httpproxyport').value.trim() || '8080',
+            OutboundSOCKS5Port: document.getElementById('f-socks5port').value.trim() || '1080'
+        };
+        var cgiBody = ['action=update'].concat(Object.keys(vals).map(function(k) {
+            return 'root.' + APP + '.' + k + '=' + encodeURIComponent(vals[k]);
+        })).join('&');
+        var apiBody = Object.keys(vals).map(function(k) {
+            return k + '=' + encodeURIComponent(vals[k]);
+        }).join('&');
 
         fetch(PARAM_URL, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body
+            body: cgiBody
         })
-        .then(function(r) { return r.text(); })
-        .then(function(txt) {
-            if (/^OK/.test(txt.trim())) {
-                setMsg('Saved — reconnecting…', 'ok');
-                startFastPoll();
-            } else {
-                setMsg('Error: ' + txt.trim(), 'err');
-            }
+        .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
+        .then(function(txt) { if (!/^OK/.test(txt.trim())) throw txt.trim(); return 'OK'; })
+        .catch(function() {
+            // param.cgi unavailable or rejected — use the app settings endpoint.
+            return fetch(API_URL, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: apiBody
+            })
+            .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
+            .then(function(txt) { return /OK/.test(txt) ? 'OK' : Promise.reject(); });
         })
-        .catch(function(e) { setMsg('Request failed: ' + e, 'err'); })
+        .then(function() { setMsg('Saved — reconnecting…', 'ok'); startFastPoll(); })
+        .catch(function(e) { setMsg('Request failed: ' + (e || 'save failed'), 'err'); })
         .finally(function() { saveBtn.disabled = false; });
     });
 
@@ -827,7 +854,7 @@
             .then(function(data) {
                 var tag = (data.tag_name || '').replace(/^v/, '');
                 if (!tag) return;
-                if (compareVersions(tag, '1.2.11') > 0) {
+                if (compareVersions(tag, '1.2.12') > 0) {
                     document.getElementById('update-version').textContent = 'v' + tag;
                     document.getElementById('update-banner').classList.add('visible');
                     if (btn) btn.textContent = 'Update Available';

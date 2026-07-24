@@ -13,7 +13,7 @@
             ],
             "vendorUrl": "https://github.com/Mo3he/Axis_Cam_WireGuard",
             "runMode": "respawn",
-            "version": "1.2.11",
+            "version": "1.2.12",
             "user": {
                 "group": "sdk",
                 "username": "sdk"
@@ -22,6 +22,13 @@
         },
         "configuration": {
             "settingPage": "index.html",
+            "reverseProxy": [
+                {
+                    "apiPath": "api",
+                    "target": "http://localhost:2203/",
+                    "access": "admin"
+                }
+            ],
             "paramConfig": [
                 {"name": "PrivateKey",    "default": "",            "type": "string"},
                 {"name": "ListenPort",    "default": "51820",       "type": "string"},
