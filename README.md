@@ -60,6 +60,8 @@ The app runs entirely in userspace using
 > Most cameras use the **ACAP 4** build. Use the **ACAP 3** build only on legacy
 > cameras that don't support ACAP 4 (typically AXIS OS 9–10).
 
+**Verified on AXIS OS 13** (13.0.0, aarch64).
+
 ## Installation
 
 > **Signed packages:** Release `.eap` files are signed with the Axis ACAP
