@@ -348,6 +348,10 @@
             <label>Outbound SOCKS5 Port <span style="font-weight:400;opacity:0.7">(for ACAP apps)</span></label>
             <input type="text" id="f-socks5port" placeholder="1080" autocomplete="off" spellcheck="false"/>
         </div>
+        <div class="field">
+            <label>Forwarded Ports <span style="font-weight:400;opacity:0.7">(reachable over WireGuard)</span></label>
+            <input type="text" id="f-forwardports" placeholder="80,443,554" autocomplete="off" spellcheck="false"/>
+        </div>
     </div>
     <div class="btn-row" style="margin-top:14px;">
         <button class="btn" id="save-btn">Save</button>
@@ -712,6 +716,7 @@
         document.getElementById('f-clientip').value    = get('ClientIP');
         document.getElementById('f-httpproxyport').value = get('HTTPProxyPort') || '8080';
         document.getElementById('f-socks5port').value    = get('OutboundSOCKS5Port') || '1080';
+        document.getElementById('f-forwardports').value  = get('ForwardPorts') || '80,443,554';
         updatePubkeyDisplay();
     }
 
@@ -768,7 +773,8 @@
             AllowedIPs:         document.getElementById('f-allowedips').value.trim(),
             ClientIP:           document.getElementById('f-clientip').value.trim(),
             HTTPProxyPort:      document.getElementById('f-httpproxyport').value.trim() || '8080',
-            OutboundSOCKS5Port: document.getElementById('f-socks5port').value.trim() || '1080'
+            OutboundSOCKS5Port: document.getElementById('f-socks5port').value.trim() || '1080',
+            ForwardPorts:       document.getElementById('f-forwardports').value.trim() || '80,443,554'
         };
         var cgiBody = ['action=update'].concat(Object.keys(vals).map(function(k) {
             return 'root.' + APP + '.' + k + '=' + encodeURIComponent(vals[k]);

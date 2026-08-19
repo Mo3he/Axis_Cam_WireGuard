@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -43,8 +44,11 @@ import (
 
 const defaultConfigPath = "/usr/local/packages/wireguardconfig/config.txt"
 
-// transparentPorts are forwarded directly: WireGuard-IP:port → 127.0.0.1:port.
-var transparentPorts = []int{80, 443, 554}
+// defaultForwardPorts are forwarded directly: WireGuard-IP:port → 127.0.0.1:port.
+var defaultForwardPorts = []int{80, 443, 554}
+
+// maxForwardPorts caps how many listeners a config can ask for.
+const maxForwardPorts = 16
 
 // socks5Port is the SOCKS5 proxy port on the WireGuard interface (not host network).
 const socks5Port = 1080
@@ -59,6 +63,29 @@ type Config struct {
 	ClientIP           string
 	HTTPProxyPort      string
 	OutboundSOCKS5Port string
+	ForwardPorts       string
+}
+
+// parseForwardPorts turns a comma-separated list into unique valid ports,
+// falling back to the defaults when nothing usable is configured.
+func parseForwardPorts(value string) []int {
+	ports := make([]int, 0, maxForwardPorts)
+	seen := make(map[int]bool, maxForwardPorts)
+	for _, field := range strings.Split(value, ",") {
+		port, err := strconv.Atoi(strings.TrimSpace(field))
+		if err != nil || port < 1 || port > 65535 || seen[port] {
+			continue
+		}
+		seen[port] = true
+		ports = append(ports, port)
+		if len(ports) == maxForwardPorts {
+			break
+		}
+	}
+	if len(ports) == 0 {
+		return defaultForwardPorts
+	}
+	return ports
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -73,6 +100,7 @@ func loadConfig(path string) (*Config, error) {
 		ClientIP:           "10.0.0.2/24",
 		HTTPProxyPort:      "8080",
 		OutboundSOCKS5Port: "1080",
+		ForwardPorts:       "80,443,554",
 	}
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -103,6 +131,8 @@ func loadConfig(path string) (*Config, error) {
 			cfg.HTTPProxyPort = val
 		case "outbound_socks5_port":
 			cfg.OutboundSOCKS5Port = val
+		case "forward_ports":
+			cfg.ForwardPorts = val
 		}
 	}
 	return cfg, scanner.Err()
@@ -236,8 +266,8 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 	t.wg.Add(1)
 	go t.runHandshakeMonitor()
 
-	// Transparent forwarders for common camera ports
-	for _, port := range transparentPorts {
+	// Transparent forwarders for the configured camera ports
+	for _, port := range parseForwardPorts(cfg.ForwardPorts) {
 		t.wg.Add(1)
 		go t.runTCPProxy(localAddr, port, fmt.Sprintf("127.0.0.1:%d", port))
 	}
@@ -335,6 +365,7 @@ func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int, dstAddr string) {
 		return
 	}
 	go func() { <-t.stopCh; _ = ln.Close() }()
+	slog.Info("transparent forwarder ready", "listen", listenAddr, "dst", dstAddr)
 
 	for {
 		c, err := ln.Accept()

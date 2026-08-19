@@ -5,6 +5,13 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.13] - 2026-08-19 - Configurable forwarded ports
+
+- The directly forwarded ports are now configurable instead of fixed at 80, 443,
+  and 554. Add port 22 to reach SSH over WireGuard, or any other camera service.
+  Set them under **Forwarded Ports** in Settings, or through the `ForwardPorts`
+  parameter. Up to 16 ports; clearing the field restores the default.
+
 ## [1.2.12] - 2026-07-24 - Save settings on recorder / access-control devices
 
 - Fix: settings can now be saved on Axis devices that do not expose

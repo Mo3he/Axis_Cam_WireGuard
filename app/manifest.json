@@ -13,7 +13,7 @@
             ],
             "vendorUrl": "https://github.com/Mo3he/Axis_Cam_WireGuard",
             "runMode": "respawn",
-            "version": "1.2.12",
+            "version": "1.2.13",
             "user": {
                 "group": "sdk",
                 "username": "sdk"
@@ -37,7 +37,8 @@
                 {"name": "AllowedIPs",         "default": "0.0.0.0/0",  "type": "string"},
                 {"name": "ClientIP",             "default": "10.0.0.2/24","type": "string"},
                 {"name": "HTTPProxyPort",        "default": "8080",        "type": "string"},
-                {"name": "OutboundSOCKS5Port",   "default": "1080",        "type": "string"}
+                {"name": "OutboundSOCKS5Port",   "default": "1080",        "type": "string"},
+                {"name": "ForwardPorts",         "default": "80,443,554",  "type": "string"}
             ]
         }
     }
