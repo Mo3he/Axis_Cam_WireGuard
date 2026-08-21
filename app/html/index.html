@@ -860,7 +860,7 @@
             .then(function(data) {
                 var tag = (data.tag_name || '').replace(/^v/, '');
                 if (!tag) return;
-                if (compareVersions(tag, '1.2.12') > 0) {
+                if (compareVersions(tag, '1.2.14' /* acap:installed-version */) > 0) {
                     document.getElementById('update-version').textContent = 'v' + tag;
                     document.getElementById('update-banner').classList.add('visible');
                     if (btn) btn.textContent = 'Update Available';
