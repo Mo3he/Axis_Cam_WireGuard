@@ -94,10 +94,19 @@ jobs:
           git add -A ':!releases'
           if git diff --cached --quiet; then
             echo "nothing to commit"
-          else
-            git commit -m "Update to $VERSION"
-            git push
+            exit 0
           fi
+          git commit -m "Update to $VERSION"
+          # The remote can move while a long build runs, so rebase and retry.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected, rebasing (attempt $attempt)"
+            git pull --rebase --autostash origin main
+          done
+          echo "could not push the version bump" >&2
+          exit 1
 
   release:
     needs: [check, build]
@@ -110,6 +119,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -122,8 +132,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$VERSION"
+          ./ci/release-notes.sh "$VERSION" "${{ needs.check.outputs.upstream }}" > /tmp/notes.md
+          cat /tmp/notes.md
           if gh release view "$tag" --json isDraft --jq '.isDraft' 2>/dev/null | grep -qx true; then
             gh release upload "$tag" releases/*.eap --clobber
+            gh release edit "$tag" --notes-file /tmp/notes.md
           elif gh release view "$tag" >/dev/null 2>&1; then
             echo "release $tag is already published; refusing to touch it" >&2
             exit 1
@@ -131,5 +144,5 @@ jobs:
             gh release create "$tag" releases/*.eap \
               --draft \
               --title "WireGuard VPN $VERSION" \
-              --generate-notes
+              --notes-file /tmp/notes.md
           fi

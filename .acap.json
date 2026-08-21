@@ -6,7 +6,9 @@
     "type": "go-module",
     "module": "golang.zx2c4.com/wireguard",
     "goMod": "app/wireguard/go.mod",
-    "note": "wireguard-go has no tags; track the module pseudo-version and bump our patch."
+    "note": "wireguard-go has no tags; track the module pseudo-version and bump our patch.",
+    "name": "wireguard-go",
+    "changesUrl": "https://git.zx2c4.com/wireguard-go/log/"
   },
   "build": {
     "command": "./build.sh && (cd acap3 && ./build.sh)",
