@@ -9,7 +9,7 @@
     "note": "wireguard-go has no tags; track the module pseudo-version and bump our patch."
   },
   "build": {
-    "command": "./build.sh",
+    "command": "./build.sh && (cd acap3 && ./build.sh)",
     "env": {}
   },
   "pins": [],
