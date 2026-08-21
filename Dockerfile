@@ -3,7 +3,7 @@ ARG VERSION=12.10.0
 ARG UBUNTU_VERSION=24.04
 ARG REPO=docker.io/axisecp
 ARG SDK=acap-native-sdk
-ARG GO_VERSION=1.22.4
+ARG GO_VERSION=1.25.5
 
 # Build go binary
 FROM docker.io/golang:${GO_VERSION} AS gobuilder-aarch64

@@ -1,0 +1,22 @@
+{
+  "app": "wireguardconfig",
+  "friendlyName": "WireGuard VPN",
+  "versionPolicy": "patch",
+  "upstream": {
+    "type": "go-module",
+    "module": "golang.zx2c4.com/wireguard",
+    "goMod": "app/wireguard/go.mod",
+    "note": "wireguard-go has no tags; track the module pseudo-version and bump our patch."
+  },
+  "build": {
+    "command": "./build.sh",
+    "env": {}
+  },
+  "pins": [],
+  "signing": {
+    "skip": [
+      "*_acap3.eap",
+      "*_root.eap"
+    ]
+  }
+}
