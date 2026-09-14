@@ -74,6 +74,11 @@
           "name": "ForwardPorts",
           "default": "80,443,554",
           "type": "string"
+        },
+        {
+          "name": "MTU",
+          "default": "1420",
+          "type": "string"
         }
       ]
     }

@@ -55,6 +55,7 @@ static char *cfg_client_ip = NULL;
 static char *cfg_http_proxy_port = NULL;
 static char *cfg_socks5_port = NULL;
 static char *cfg_forward_ports = NULL;
+static char *cfg_mtu = NULL;
 
 static void cache_set(char **field, const char *value) {
     if (!value)
@@ -151,6 +152,7 @@ static void load_config_cache(AXParameter *handle) {
     LOAD("HTTPProxyPort",      cfg_http_proxy_port)
     LOAD("OutboundSOCKS5Port", cfg_socks5_port)
     LOAD("ForwardPorts",       cfg_forward_ports)
+    LOAD("MTU",                cfg_mtu)
 #undef LOAD
     // clang-format on
 }
@@ -171,6 +173,7 @@ static void write_config_file(void) {
     fprintf(f, "http_proxy_port=%s\n",     cache_get(&cfg_http_proxy_port, "8080"));
     fprintf(f, "outbound_socks5_port=%s\n",cache_get(&cfg_socks5_port,  "1080"));
     fprintf(f, "forward_ports=%s\n",       cache_get(&cfg_forward_ports, "80,443,554"));
+    fprintf(f, "mtu=%s\n",                 cache_get(&cfg_mtu,          "1420"));
     // clang-format on
     fclose(f);
     chmod(CONFIG_FILE, 0600);
@@ -220,6 +223,7 @@ static void parameter_changed(const gchar *name, const gchar *value, gpointer G_
     else if (strcmp(short_name, "HTTPProxyPort")      == 0) cache_set(&cfg_http_proxy_port,  value);
     else if (strcmp(short_name, "OutboundSOCKS5Port") == 0) cache_set(&cfg_socks5_port,      value);
     else if (strcmp(short_name, "ForwardPorts")       == 0) cache_set(&cfg_forward_ports,    value);
+    else if (strcmp(short_name, "MTU")                == 0) cache_set(&cfg_mtu,             value);
     else syslog(LOG_WARNING, "unknown parameter: %s (raw: %s)", short_name, name);
     // clang-format on
 
@@ -243,7 +247,8 @@ static const char *http_param_names[] = {
     "ClientIP",
     "HTTPProxyPort",
     "OutboundSOCKS5Port",
-    "ForwardPorts"};
+    "ForwardPorts",
+    "MTU"};
 
 static int http_is_known_param(const char *name) {
     for (size_t i = 0; i < G_N_ELEMENTS(http_param_names); i++)
@@ -271,6 +276,8 @@ static void http_cache_set_by_name(const char *name, const char *value) {
         cache_set(&cfg_socks5_port, value);
     else if (strcmp(name, "ForwardPorts") == 0)
         cache_set(&cfg_forward_ports, value);
+    else if (strcmp(name, "MTU") == 0)
+        cache_set(&cfg_mtu, value);
 }
 
 static void http_json_append_escaped(GString *out, const char *s) {
@@ -535,7 +542,8 @@ int main(void) {
         "ClientIP",
         "HTTPProxyPort",
         "OutboundSOCKS5Port",
-        "ForwardPorts"};
+        "ForwardPorts",
+        "MTU"};
     for (size_t i = 0; i < sizeof(params) / sizeof(params[0]); i++) {
         if (!ax_parameter_register_callback(handle, params[i], parameter_changed, handle, &error)) {
             syslog(LOG_WARNING, "register callback %s: %s", params[i], error ? error->message : "unknown");

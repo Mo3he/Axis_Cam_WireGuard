@@ -101,6 +101,7 @@ Open the app's settings page in the camera web UI and fill in:
 | **Client IP** | This camera's IP address on the VPN network, e.g. `10.0.0.2/24` |
 | **HTTP Proxy Port** | Port for the HTTP CONNECT proxy on localhost (default: `8080`) |
 | **Outbound SOCKS5 Port** | Port for the outbound SOCKS5 proxy on localhost (default: `1080`) |
+| **MTU** | Tunnel MTU (default: `1420`, valid range `576` to `1500`) |
 
 The Private Key field will appear blank when you revisit the settings, this is
 expected behavior for password-type parameters. The key is saved securely.
@@ -108,6 +109,11 @@ expected behavior for password-type parameters. The key is saved securely.
 > [!TIP]
 > Click **Import .conf** on the settings page to load all fields from a standard
 > WireGuard `.conf` file at once.
+
+> [!TIP]
+> If the tunnel reports connected but traffic stalls or is unreliable under
+> load, the path cannot carry 1420 byte packets. This is common on cellular
+> uplinks. Lower the MTU, `1320` is a good starting point.
 
 ### Generating keys
 

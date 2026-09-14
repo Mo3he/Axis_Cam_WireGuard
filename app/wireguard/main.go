@@ -53,6 +53,15 @@ const maxForwardPorts = 16
 // socks5Port is the SOCKS5 proxy port on the WireGuard interface (not host network).
 const socks5Port = 1080
 
+// netstack MTU bounds. 1420 leaves room for the WireGuard overhead on a 1500
+// byte path; constrained paths such as cellular may need less. The lower bound
+// is the IPv4 minimum reassembly buffer size.
+const (
+	defaultMTU = 1420
+	minMTU     = 576
+	maxMTU     = 1500
+)
+
 // Config holds parsed WireGuard settings from the config file.
 type Config struct {
 	PrivateKey         string
@@ -64,6 +73,17 @@ type Config struct {
 	HTTPProxyPort      string
 	OutboundSOCKS5Port string
 	ForwardPorts       string
+	MTU                string
+}
+
+// parseMTU returns the configured netstack MTU, falling back to defaultMTU when
+// the value is empty, unparseable or outside the supported range.
+func parseMTU(value string) int {
+	mtu, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || mtu < minMTU || mtu > maxMTU {
+		return defaultMTU
+	}
+	return mtu
 }
 
 // parseForwardPorts turns a comma-separated list into unique valid ports,
@@ -101,6 +121,7 @@ func loadConfig(path string) (*Config, error) {
 		HTTPProxyPort:      "8080",
 		OutboundSOCKS5Port: "1080",
 		ForwardPorts:       "80,443,554",
+		MTU:                strconv.Itoa(defaultMTU),
 	}
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -133,6 +154,8 @@ func loadConfig(path string) (*Config, error) {
 			cfg.OutboundSOCKS5Port = val
 		case "forward_ports":
 			cfg.ForwardPorts = val
+		case "mtu":
+			cfg.MTU = val
 		}
 	}
 	return cfg, scanner.Err()
@@ -228,10 +251,11 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 	}
 	localAddr := prefix.Addr()
 
+	mtu := parseMTU(cfg.MTU)
 	tun, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{localAddr},
 		[]netip.Addr{},
-		1420,
+		mtu,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create netstack TUN: %w", err)
@@ -925,6 +949,7 @@ func (a *appState) reload() {
 	slog.Info("WireGuard tunnel up",
 		"ip", cfg.ClientIP,
 		"endpoint", cfg.Endpoint,
+		"mtu", parseMTU(cfg.MTU),
 		"socks5_port", socks5Port,
 		"http_proxy_port", cfg.HTTPProxyPort,
 		"outbound_socks5_port", cfg.OutboundSOCKS5Port,

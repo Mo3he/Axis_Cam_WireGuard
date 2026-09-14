@@ -352,6 +352,10 @@
             <label>Forwarded Ports <span style="font-weight:400;opacity:0.7">(reachable over WireGuard)</span></label>
             <input type="text" id="f-forwardports" placeholder="80,443,554" autocomplete="off" spellcheck="false"/>
         </div>
+        <div class="field">
+            <label>MTU <span style="font-weight:400;opacity:0.7">(lower for cellular, e.g. 1320)</span></label>
+            <input type="text" id="f-mtu" placeholder="1420" autocomplete="off" spellcheck="false"/>
+        </div>
     </div>
     <div class="btn-row" style="margin-top:14px;">
         <button class="btn" id="save-btn">Save</button>
@@ -717,6 +721,7 @@
         document.getElementById('f-httpproxyport').value = get('HTTPProxyPort') || '8080';
         document.getElementById('f-socks5port').value    = get('OutboundSOCKS5Port') || '1080';
         document.getElementById('f-forwardports').value  = get('ForwardPorts') || '80,443,554';
+        document.getElementById('f-mtu').value            = get('MTU') || '1420';
         updatePubkeyDisplay();
     }
 
@@ -774,7 +779,8 @@
             ClientIP:           document.getElementById('f-clientip').value.trim(),
             HTTPProxyPort:      document.getElementById('f-httpproxyport').value.trim() || '8080',
             OutboundSOCKS5Port: document.getElementById('f-socks5port').value.trim() || '1080',
-            ForwardPorts:       document.getElementById('f-forwardports').value.trim() || '80,443,554'
+            ForwardPorts:       document.getElementById('f-forwardports').value.trim() || '80,443,554',
+            MTU:                document.getElementById('f-mtu').value.trim() || '1420'
         };
         var cgiBody = ['action=update'].concat(Object.keys(vals).map(function(k) {
             return 'root.' + APP + '.' + k + '=' + encodeURIComponent(vals[k]);
@@ -824,6 +830,7 @@
             var pub  = confVal('PublicKey');
             var ep   = confVal('Endpoint');
             var aip  = confVal('AllowedIPs');
+            var mtu  = confVal('MTU');
 
             if (pk)   document.getElementById('f-privatekey').value  = pk;
             if (addr) document.getElementById('f-clientip').value    = addr;
@@ -831,6 +838,7 @@
             if (pub)  document.getElementById('f-peerpubkey').value  = pub;
             if (ep)   document.getElementById('f-endpoint').value    = ep;
             if (aip)  document.getElementById('f-allowedips').value  = aip;
+            if (mtu)  document.getElementById('f-mtu').value         = mtu;
 
             setMsg('Config imported from ' + file.name + ' — click Save to apply.', 'ok');
         };
