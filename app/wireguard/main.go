@@ -860,6 +860,9 @@ func main() {
 				app.lastMod = info.ModTime()
 				slog.Info("config file changed — reloading")
 				app.reload()
+			} else if app.retryPending() {
+				slog.Info("tunnel not up, retrying")
+				app.reload()
 			}
 		}
 	}
@@ -868,20 +871,38 @@ func main() {
 // ── app state ────────────────────────────────────────────────────────────────
 
 type appState struct {
-	mu         sync.Mutex
-	current    *tunnel
-	configPath string
-	lastMod    time.Time
+	mu          sync.Mutex
+	current     *tunnel
+	configPath  string
+	lastMod     time.Time
+	startFailed bool
+}
+
+// retryPending reports whether the last attempt to bring the tunnel up failed
+// and left nothing running. An incomplete config is not a failure, so a camera
+// that has not been configured yet never enters the retry loop.
+func (a *appState) retryPending() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.current == nil && a.startFailed
+}
+
+func (a *appState) setStartFailed(failed bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.startFailed = failed
 }
 
 func (a *appState) reload() {
 	cfg, err := loadConfig(a.configPath)
 	if err != nil {
 		slog.Error("load config", "err", err)
+		a.setStartFailed(true)
 		return
 	}
 	if cfg.PrivateKey == "" || cfg.PeerPubKey == "" {
 		slog.Info("config incomplete — waiting for keys to be set")
+		a.setStartFailed(false)
 		return
 	}
 
@@ -896,9 +917,11 @@ func (a *appState) reload() {
 	t, err := startTunnel(cfg)
 	if err != nil {
 		slog.Error("start tunnel", "err", err)
+		a.startFailed = true
 		return
 	}
 	a.current = t
+	a.startFailed = false
 	slog.Info("WireGuard tunnel up",
 		"ip", cfg.ClientIP,
 		"endpoint", cfg.Endpoint,
