@@ -108,6 +108,7 @@ func parseForwardPorts(value string) []int {
 	return ports
 }
 
+//nolint:gocyclo // one branch per config key; splitting it would not make it clearer
 func loadConfig(path string) (*Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
