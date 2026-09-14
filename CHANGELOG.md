@@ -5,6 +5,26 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.15] - 2026-09-14 - Startup retry and configurable MTU
+
+- Fix: the tunnel now recovers on its own when it fails to start. Previously a
+  failed start was final, and the app only tried again if the configuration
+  changed, so a camera that booted before its network was ready stayed
+  disconnected until someone restarted the app. This mattered most on cellular
+  uplinks, where the endpoint hostname cannot be resolved yet at boot. The app
+  now retries every 30 seconds until the tunnel comes up. A camera that has not
+  been configured yet does not retry.
+- The tunnel **MTU** is now configurable, under Settings or through the `MTU`
+  parameter. It defaults to `1420` as before, so existing installations are
+  unchanged. Lower it when the tunnel reports connected but traffic stalls or is
+  unreliable under load, which is common on cellular and other constrained
+  paths; `1320` is a good starting point. Values outside 576 to 1500 fall back to
+  the default. An `MTU` line in an imported `.conf` is picked up automatically.
+
+Both issues were reported, diagnosed and field-tested by
+[@ascnetops](https://github.com/ascnetops) across 12 AXIS Q61-E cameras on
+cellular uplinks. See [#13](https://github.com/Mo3he/Axis_Cam_WireGuard/issues/13).
+
 ## 1.2.14 - 2026-08-21
 
 - Update to upstream v0.0.0-20260522210424-ecfc5a8d5446.
