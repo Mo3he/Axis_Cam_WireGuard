@@ -16,11 +16,11 @@
       "dependencyDashboardApproval": true
     },
     {
-      "description": "Keep routine Go transitive dependency maintenance together.",
+      "description": "Renovate disables transitive Go modules by default; allow them only to fix a CVE.",
       "matchManagers": ["gomod"],
       "matchDepTypes": ["indirect"],
-      "groupName": "Go indirect dependencies",
-      "groupSlug": "go-indirect-dependencies"
+      "matchJsonata": ["$exists(vulnerabilityFixVersion)"],
+      "enabled": true
     }
   ]
 }
