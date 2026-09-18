@@ -1,0 +1,41 @@
+---
+# Advisory only: govulncheck reports call-reachable vulnerabilities, including
+# Go standard library ones that Dependabot never surfaces. It does not fail the
+# build, because most findings turn out to be unreachable and get dismissed.
+#
+# Standard library findings reflect the Go version used here, not the one the
+# Dockerfile pins for the shipped binary. If a stdlib issue appears, check the
+# builder image tag too: an EOL `golang:` pin is the usual cause.
+name: Vulnerability scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  MODULE_DIR: app/wireguard
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Scan for reachable vulnerabilities
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd "$MODULE_DIR"
+          GOOS=linux GOARCH=arm64 govulncheck ./... | tee -a "$GITHUB_STEP_SUMMARY"
