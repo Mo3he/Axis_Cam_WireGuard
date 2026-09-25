@@ -210,7 +210,11 @@ static void parameter_changed(const gchar *name, const gchar *value, gpointer G_
     const char *dot = strrchr(name, '.');
     const char *short_name = dot ? dot + 1 : name;
 
-    syslog(LOG_INFO, "parameter changed: %s value=%s (raw name: %s)", short_name, value ? value : "(null)", name);
+    /* axparameter fires this for every param on any save, so a secret here would be logged on each save. */
+    const char *shown = value ? value : "(null)";
+    if (value && strcmp(short_name, "PrivateKey") == 0)
+        shown = *value ? "(set)" : "(empty)";
+    syslog(LOG_INFO, "parameter changed: %s value=%s (raw name: %s)", short_name, shown, name);
 
     /* Cache the new value from the callback argument if non-NULL. */
     // clang-format off

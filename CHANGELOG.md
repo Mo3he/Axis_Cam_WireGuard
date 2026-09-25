@@ -5,6 +5,19 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.16] - 2026-09-25 - Private key no longer written to the system log
+
+- Security fix: earlier versions wrote the WireGuard **private key** to the
+  camera's system log in plain text. Because AXIS OS reports every app
+  parameter whenever any setting is saved, this happened on every save from the
+  Settings page, not only when the key was changed. Recorders and other devices
+  without `param.cgi` save through the app's own endpoint and were not affected.
+  The log now records only whether a key is set.
+- **If you have shared a system log or server report from a camera running an
+  earlier version** (for example with support), treat that key as exposed:
+  generate a new key pair, update the camera and the peer, and remove the old
+  public key from the peer.
+
 ## [1.2.15] - 2026-09-14 - Startup retry and configurable MTU
 
 - Fix: the tunnel now recovers on its own when it fails to start. Previously a
@@ -84,6 +97,7 @@ cellular uplinks. See [#13](https://github.com/Mo3he/Axis_Cam_WireGuard/issues/1
 
 ## [1.0.0] - 2025-04-17
 
+[1.2.16]: https://github.com/Mo3he/Axis_Cam_WireGuard/releases/tag/v1.2.16
 [1.2.11]: https://github.com/Mo3he/Axis_Cam_WireGuard/releases/tag/v1.2.11
 [1.2.10]: https://github.com/Mo3he/Axis_Cam_WireGuard/releases/tag/v1.2.10
 [1.2.9]: https://github.com/Mo3he/Axis_Cam_WireGuard/releases/tag/v1.2.9
