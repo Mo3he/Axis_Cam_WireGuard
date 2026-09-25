@@ -491,7 +491,7 @@
         }
     });
 
-    // ── Key pair generation (TweetNaCl.js — X25519 / Curve25519) ───────────
+    // ── Key pair generation (TweetNaCl.js, X25519 / Curve25519) ────────────
     function rawToB64(bytes) {
         return btoa(String.fromCharCode.apply(null, bytes));
     }
@@ -583,12 +583,7 @@
     function parseStatus(txt) {
         var lines = txt.split('\n');
 
-        // Walk all lines accumulating the latest known state.
-        // Priority of events (later always wins):
-        //   "WireGuard tunnel up"     → tunnel process started, note ip/endpoint
-        //   "WireGuard handshake ok"  → cryptographically confirmed connected
-        //   "WireGuard handshake lost"→ confirmed disconnected (wrong key / server down)
-        //   "shutting down" etc.      → tunnel stopped
+        // Only the handshake lines prove the tunnel works; "tunnel up" just means it started.
         var lastUpIdx       = -1;
         var lastHandshakeOk = -1;
         var lastHandshakeLost = -1;
@@ -600,10 +595,7 @@
             if (/shutting down|Deactivated successfully|acapctl.*stop/.test(lines[i])) lastDownIdx    = i;
         }
 
-        // If the log has no relevant events at all (empty or fully rotated),
-        // fall back to the localStorage cache before doing anything else.
-        // This prevents incorrectly showing "Stopped" when the log rolls over
-        // while the tunnel is still running.
+        // No events at all means the log rotated; trust the cache instead of showing Stopped.
         if (lastUpIdx === -1 && lastDownIdx === -1 && lastHandshakeOk === -1 && lastHandshakeLost === -1) {
             try {
                 var cached = JSON.parse(localStorage.getItem('wg_cache') || 'null');
@@ -616,7 +608,6 @@
 
         var ip = null, ep = null, httpProxy = null, socks5Proxy = null;
 
-        // Extract ip/endpoint from the last tunnel-up line (always present on start)
         if (lastUpIdx !== -1) {
             var m = lines[lastUpIdx].match(/ip=(\S+)/);
             if (m) ip = m[1].split('/')[0];
@@ -631,10 +622,6 @@
             }
         }
 
-        // Determine true state:
-        // A handshake-ok after the last tunnel-up (and after any down) = connected
-        // A handshake-lost / down after last handshake-ok = disconnected
-        // We haven't seen a handshake line yet but tunnel came up = "connecting"
         var tunStarted    = lastUpIdx > lastDownIdx && lastUpIdx !== -1;
         var hsOkAfterUp   = lastHandshakeOk > lastUpIdx && lastHandshakeOk > lastDownIdx;
         var hsLostAfterOk = lastHandshakeLost > lastHandshakeOk;
@@ -653,8 +640,7 @@
         else if (tunStarted)                    state = 'connecting';
         else                                    state = 'disconnected';
 
-        // If connected but the tunnel-up line has rotated out of the log,
-        // fill missing connection details from the cache so the info card stays visible.
+        // The tunnel-up line may have rotated out; keep the info card filled from the cache.
         if (state === 'connected' && (!ip || !ep)) {
             try {
                 var c2 = JSON.parse(localStorage.getItem('wg_cache') || 'null');
@@ -687,8 +673,7 @@
         if (r.state === 'connected' && r.ip) {
             document.getElementById('d-clientip').textContent  = r.ip;
             document.getElementById('d-endpoint').textContent  = r.endpoint || '-';
-            // Use actual bound address from log if available; fall back to the
-            // user-configured port (already populated from ACAP params by loadConfig).
+            // Prefer the bound address from the log over the configured port.
             var httpPort   = (document.getElementById('f-httpproxyport').value || '8080').trim();
             var socks5Port = (document.getElementById('f-socks5port').value    || '1080').trim();
             document.getElementById('d-http').textContent  = '127.0.0.1:' + (r.httpProxy  ? r.httpProxy.split(':').pop()  : httpPort);
@@ -706,9 +691,7 @@
     }
 
     // ── Load config: param.cgi when available, else the app endpoint ────────
-    // On devices that do not serve /axis-cgi/param.cgi (e.g. recorder/NVR and
-    // access-control products) the UI falls back to the app's own settings
-    // endpoint, exposed through the manifest reverseProxy.
+    // The fallback (for devices without param.cgi, e.g. NVRs) goes via the manifest reverseProxy.
     var API_URL = 'api/settings';
 
     function applyConfig(get) {
@@ -748,7 +731,7 @@
         });
     }
 
-    // ── Save config to param.cgi ───────────────────────────────────────────
+    // ── Save config: param.cgi, else the app endpoint ───────────────────────
     var saveBtn = document.getElementById('save-btn');
     var cfgMsg  = document.getElementById('cfg-msg');
 
@@ -798,7 +781,7 @@
         .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
         .then(function(txt) { if (!/^OK/.test(txt.trim())) throw txt.trim(); return 'OK'; })
         .catch(function() {
-            // param.cgi unavailable or rejected — use the app settings endpoint.
+            // param.cgi unavailable or rejected: use the app settings endpoint.
             return fetch(API_URL, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -859,7 +842,6 @@
         });
     }
 
-    // Check for updates from GitHub
     function checkForUpdate(manual) {
         var btn = document.getElementById('check-update-btn');
         if (manual && btn) btn.textContent = 'Checking...';

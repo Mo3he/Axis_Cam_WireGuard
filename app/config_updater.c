@@ -2,18 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * ACAP parameter bridge for the WireGuard userspace VPN.
- *
- * Responsibilities:
- *  1. Read WireGuard parameters from the ACAP parameter store (axparameter).
- *  2. Write them to CONFIG_FILE so the Go binary can read them.
- *  3. Launch the Go binary (wireguard-userspace) as a child process.
- *  4. On any parameter change: rewrite CONFIG_FILE and do a full stop+restart
- *     of the child so ports are cleanly released and new config is picked up.
- *     Rapid changes within 300 ms are coalesced into a single restart.
- *  5. Watchdog: if the child exits unexpectedly, restart it.
- *
- * Runs as the unprivileged 'sdk' ACAP user — no root required.
+ * ACAP parameter bridge for the WireGuard userspace VPN: mirrors the ACAP
+ * parameters to CONFIG_FILE and supervises wireguard-userspace, fully restarting
+ * it on any change (debounced 300 ms) so its ports are cleanly released.
  */
 
 #include <axsdk/axparameter.h>
@@ -59,7 +50,7 @@ static char *cfg_mtu = NULL;
 
 static void cache_set(char **field, const char *value) {
     if (!value)
-        return; /* NULL → keep existing cached value */
+        return;
     free(*field);
     *field = strdup(value);
 }
@@ -83,10 +74,9 @@ static void stop_proxy(void) {
             wg_pid = -1;
             return;
         }
-        usleep(100000); /* 100 ms */
+        usleep(100000);
     }
 
-    /* Still alive after 3 s — force-kill. */
     syslog(LOG_WARNING, "wireguard-userspace did not exit in 3 s, sending SIGKILL");
     kill(wg_pid, SIGKILL);
     waitpid(wg_pid, NULL, 0);
@@ -126,7 +116,7 @@ static gboolean watchdog_cb(gpointer G_GNUC_UNUSED data) {
 
 /* ── config file ──────────────────────────────────────────────────────────── */
 
-/* Read all params from the store — safe to call any time outside a callback. */
+/* Safe to call any time outside an axparameter callback. */
 static void load_config_cache(AXParameter *handle) {
     GError *error = NULL;
     gchar *val = NULL;
@@ -182,16 +172,12 @@ static void write_config_file(void) {
 
 /* ── ACAP parameter callback ──────────────────────────────────────────────── */
 
-/* The AXParameter handle stored at startup — used for the fallback read. */
 static AXParameter *g_ax_handle = NULL;
 
 static gboolean debounced_restart(gpointer G_GNUC_UNUSED data) {
     reload_timer_id = 0;
 
-    /* Always re-read ALL params from the store at this point.
-     * By 300 ms after the callback the Axis parameter write is complete,
-     * so ax_parameter_get is instant (no lock contention).  This is the
-     * authoritative refresh regardless of what the callback value arg held. */
+    /* The parameter write has completed by now, so re-read the authoritative values. */
     if (g_ax_handle) {
         load_config_cache(g_ax_handle);
     }
@@ -204,9 +190,7 @@ static gboolean debounced_restart(gpointer G_GNUC_UNUSED data) {
 }
 
 static void parameter_changed(const gchar *name, const gchar *value, gpointer G_GNUC_UNUSED handle_void_ptr) {
-    /* Use the last component after '.' as the short name.
-     * The full name casing varies by firmware (e.g. "root.Wireguardconfig.Endpoint"
-     * vs "root.wireguardconfig.Endpoint") so we never rely on the prefix. */
+    /* Match on the last component only: the prefix casing varies by firmware. */
     const char *dot = strrchr(name, '.');
     const char *short_name = dot ? dot + 1 : name;
 
@@ -216,7 +200,6 @@ static void parameter_changed(const gchar *name, const gchar *value, gpointer G_
         shown = *value ? "(set)" : "(empty)";
     syslog(LOG_INFO, "parameter changed: %s value=%s (raw name: %s)", short_name, shown, name);
 
-    /* Cache the new value from the callback argument if non-NULL. */
     // clang-format off
     if      (strcmp(short_name, "PrivateKey")         == 0) cache_set(&cfg_private_key,      value);
     else if (strcmp(short_name, "ListenPort")         == 0) cache_set(&cfg_listen_port,      value);
@@ -231,16 +214,14 @@ static void parameter_changed(const gchar *name, const gchar *value, gpointer G_
     else syslog(LOG_WARNING, "unknown parameter: %s (raw: %s)", short_name, name);
     // clang-format on
 
-    /* Coalesce all 6 saves into one restart 300 ms after the last change. */
+    /* A save fires one callback per parameter; restart once, 300 ms after the last. */
     if (reload_timer_id)
         g_source_remove(reload_timer_id);
     reload_timer_id = g_timeout_add(300, debounced_restart, NULL);
 }
 
 /* ── settings fallback HTTP server (127.0.0.1:HTTP_PORT) ─────────────────────
- * Serves GET/POST /api/settings so the web UI can read and write the ACAP
- * parameters directly on devices that do not expose /axis-cgi/param.cgi
- * (e.g. recorder/NVR and access-control products). */
+ * GET/POST /api/settings for devices without /axis-cgi/param.cgi (e.g. NVRs). */
 
 static const char *http_param_names[] = {
     "PrivateKey",
@@ -446,7 +427,7 @@ static gboolean http_on_incoming(
         if (have_headers && req->len - header_end >= content_length)
             break;
         if (req->len > 262144)
-            break; /* safety cap */
+            break;
     }
 
     int is_get = g_str_has_prefix(req->str, "GET ");

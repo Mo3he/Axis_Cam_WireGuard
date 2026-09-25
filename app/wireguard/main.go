@@ -1,18 +1,11 @@
 // Copyright (C) 2024  Mo3he
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// WireGuard userspace VPN for Axis cameras (ACAP).
-// Runs entirely in userspace via wireguard-go + gVisor netstack — no kernel TUN
-// device, no CAP_NET_ADMIN, no root required.
-//
-// Network access model:
-//   - Transparent TCP port forwarding for common camera ports (80, 443, 554)
-//   - SOCKS5 proxy on port 1080 for full access to any camera port (WireGuard peer → camera)
-//   - HTTP CONNECT proxy on port 8080 (set http://127.0.0.1:8080 in camera global proxy settings)
-//   - Outbound SOCKS5 on localhost:1080 — camera services (e.g. MQTT) → WireGuard → internet
-//
-// Config is read from CONFIG_FILE (written by the C ACAP bridge via axparameter).
-// Reloads on SIGUSR1 or when the config file modification time changes.
+// WireGuard userspace VPN for Axis cameras (ACAP): wireguard-go on a gVisor
+// netstack, so no kernel TUN device, CAP_NET_ADMIN or root is needed.
+// Inbound: forwarded camera ports and a SOCKS5 proxy on the tunnel IP.
+// Outbound: HTTP CONNECT and SOCKS5 proxies on 127.0.0.1 that exit via the tunnel.
+// Reloads the config written by config_updater.c on SIGUSR1 or file change.
 
 package main
 
@@ -44,7 +37,7 @@ import (
 
 const defaultConfigPath = "/usr/local/packages/wireguardconfig/config.txt"
 
-// defaultForwardPorts are forwarded directly: WireGuard-IP:port → 127.0.0.1:port.
+// defaultForwardPorts are used when ForwardPorts has no valid entry.
 var defaultForwardPorts = []int{80, 443, 554}
 
 // maxForwardPorts caps how many listeners a config can ask for.
@@ -53,9 +46,8 @@ const maxForwardPorts = 16
 // socks5Port is the SOCKS5 proxy port on the WireGuard interface (not host network).
 const socks5Port = 1080
 
-// netstack MTU bounds. 1420 leaves room for the WireGuard overhead on a 1500
-// byte path; constrained paths such as cellular may need less. The lower bound
-// is the IPv4 minimum reassembly buffer size.
+// netstack MTU bounds: 1420 fits the WireGuard overhead on a 1500-byte path,
+// 576 is the IPv4 minimum reassembly buffer size.
 const (
 	defaultMTU = 1420
 	minMTU     = 576
@@ -76,8 +68,7 @@ type Config struct {
 	MTU                string
 }
 
-// parseMTU returns the configured netstack MTU, falling back to defaultMTU when
-// the value is empty, unparseable or outside the supported range.
+// parseMTU returns defaultMTU for empty, unparseable or out-of-range values.
 func parseMTU(value string) int {
 	mtu, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil || mtu < minMTU || mtu > maxMTU {
@@ -86,8 +77,7 @@ func parseMTU(value string) int {
 	return mtu
 }
 
-// parseForwardPorts turns a comma-separated list into unique valid ports,
-// falling back to the defaults when nothing usable is configured.
+// parseForwardPorts returns up to maxForwardPorts unique valid ports, or the defaults if none.
 func parseForwardPorts(value string) []int {
 	ports := make([]int, 0, maxForwardPorts)
 	seen := make(map[int]bool, maxForwardPorts)
@@ -162,8 +152,7 @@ func loadConfig(path string) (*Config, error) {
 	return cfg, scanner.Err()
 }
 
-// base64ToHex converts a standard base64-encoded WireGuard key to lowercase hex,
-// which is the format expected by the wireguard-go UAPI.
+// base64ToHex converts a base64 WireGuard key to the hex form the UAPI expects.
 func base64ToHex(b64 string) (string, error) {
 	b, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
@@ -195,8 +184,7 @@ func buildUAPI(cfg *Config) (string, error) {
 		}
 	}
 	if cfg.Endpoint != "" {
-		// The WireGuard UAPI requires an IP:port endpoint, not a hostname.
-		// Resolve the hostname here so that DNS names are accepted.
+		// The UAPI only accepts IP:port, so resolve hostnames here.
 		host, port, err := net.SplitHostPort(cfg.Endpoint)
 		if err != nil {
 			return "", fmt.Errorf("invalid endpoint %q: %w", cfg.Endpoint, err)
@@ -233,8 +221,7 @@ func (t *tunnel) close() {
 	t.dev.Close()
 }
 
-// parsePort returns the port number from a string config value.
-// Falls back to defaultPort if the string is empty or not a valid port number.
+// parsePort returns configured as a port number, or defaultPort if empty or invalid.
 func parsePort(configured string, defaultPort int) int {
 	if configured != "" {
 		var p int
@@ -284,42 +271,29 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 	httpPort := parsePort(cfg.HTTPProxyPort, 8080)
 	socks5OutPort := parsePort(cfg.OutboundSOCKS5Port, 1080)
 
-	// Handshake monitor: polls WireGuard peer state every 15 s and logs
-	// "WireGuard handshake ok" / "WireGuard handshake lost" so the UI can
-	// show true connected/disconnected status based on cryptographic proof,
-	// not just whether the process started.
+	// The UI derives connected/disconnected from these handshake log lines.
 	t.wg.Add(1)
 	go t.runHandshakeMonitor()
 
-	// Transparent forwarders for the configured camera ports
 	for _, port := range parseForwardPorts(cfg.ForwardPorts) {
 		t.wg.Add(1)
 		go t.runTCPProxy(localAddr, port, fmt.Sprintf("127.0.0.1:%d", port))
 	}
 
-	// SOCKS5 proxy for full access to any camera port
 	t.wg.Add(1)
 	go t.runSOCKS5(localAddr, socks5Port)
 
-	// HTTP CONNECT proxy on localhost so the camera can route its own outbound
-	// HTTP/HTTPS traffic through WireGuard via the global proxy setting.
 	t.wg.Add(1)
 	go t.runHTTPProxy(httpPort)
 
-	// Outbound SOCKS5 on localhost so camera services (e.g. MQTT) can route
-	// connections through WireGuard. Configure those services to use
-	// SOCKS5 127.0.0.1:<port>.
 	t.wg.Add(1)
 	go t.runOutboundSOCKS5(socks5OutPort)
 
 	return t, nil
 }
 
-// runHandshakeMonitor polls the WireGuard device every 15 s via IpcGet and
-// logs whether the peer has completed a recent handshake.  A handshake is
-// considered "ok" if it occurred within the last 3 minutes (2× the 90-second
-// WireGuard handshake expiry; keepalive is 25 s so a healthy tunnel will
-// re-handshake well within that window).
+// runHandshakeMonitor logs handshake ok/lost every 15 s. A handshake older than
+// 3 min (WireGuard's REJECT_AFTER_TIME; healthy peers rekey every 2 min) is lost.
 //
 //nolint:gocyclo
 func (t *tunnel) runHandshakeMonitor() {
@@ -341,8 +315,6 @@ func (t *tunnel) runHandshakeMonitor() {
 		case <-ticker.C:
 		}
 
-		// IpcGet returns the UAPI device state.  We look for:
-		//   last_handshake_time_sec=<unix-seconds>
 		buf := &strings.Builder{}
 		if err := t.dev.IpcGetOperation(buf); err != nil {
 			slog.Warn("handshake monitor: IpcGet failed", "err", err)
@@ -422,10 +394,8 @@ func relay(src net.Conn, dst string) {
 	<-done
 }
 
-// runSOCKS5 listens on the WireGuard IP and handles SOCKS5 CONNECT requests,
-// forwarding each to 127.0.0.1:<requested-port> on the local host.
-// Only the port from the client's request is honoured; the destination address
-// is always localhost so this proxy cannot be used as a general open proxy.
+// runSOCKS5 serves SOCKS5 CONNECT on the tunnel IP. Only the requested port is
+// honoured; the destination is always 127.0.0.1 so it cannot be an open proxy.
 func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 	defer t.wg.Done()
 
@@ -458,9 +428,7 @@ func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 	}
 }
 
-// handleSOCKS5 implements the SOCKS5 server-side handshake (RFC 1928).
-// Only CONNECT is supported; the destination host is always replaced with
-// 127.0.0.1 so the proxy only reaches local camera services.
+// handleSOCKS5 handles one RFC 1928 CONNECT request, always dialing 127.0.0.1.
 func handleSOCKS5(c net.Conn) {
 	defer c.Close()                                     //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
@@ -536,10 +504,8 @@ func handleSOCKS5(c net.Conn) {
 	<-done
 }
 
-// runHTTPProxy listens on 127.0.0.1:port (host network) and handles HTTP CONNECT
-// requests by tunnelling the connection through the WireGuard netstack. Plain
-// HTTP requests (non-CONNECT) are also forwarded. Set the camera's global proxy
-// to http://127.0.0.1:<port> to route outbound camera traffic through the VPN.
+// runHTTPProxy serves an HTTP proxy (CONNECT and plain) on 127.0.0.1:port that
+// exits via the tunnel; point the camera's global proxy at it.
 func (t *tunnel) runHTTPProxy(port int) {
 	defer t.wg.Done()
 
@@ -567,8 +533,7 @@ func (t *tunnel) runHTTPProxy(port int) {
 	}
 }
 
-// dialViaWG resolves hostport using the host OS DNS resolver, then connects to
-// the resulting IP through the WireGuard netstack so the traffic exits via VPN.
+// dialViaWG resolves with the host DNS (the netstack has none) and dials through the tunnel.
 func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
@@ -591,7 +556,6 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 
 	rd := bufio.NewReader(c)
 
-	// Read the request line: METHOD target HTTP/x.x
 	requestLine, err := rd.ReadString('\n')
 	if err != nil {
 		return
@@ -643,7 +607,6 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		}
 		relativePath := u.RequestURI()
 
-		// Collect headers so we can forward them verbatim.
 		var headerLines []string
 		for {
 			line, readErr := rd.ReadString('\n')
@@ -678,10 +641,8 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 	}
 }
 
-// runOutboundSOCKS5 listens on 127.0.0.1:port (host network) and handles SOCKS5
-// CONNECT requests by tunnelling the connection through the WireGuard netstack.
-// This is the "outbound" direction: camera services → SOCKS5 → WireGuard → internet.
-// Configure camera services (e.g. MQTT) to use SOCKS5 at 127.0.0.1:<port>.
+// runOutboundSOCKS5 serves SOCKS5 on 127.0.0.1:port for camera services (e.g.
+// MQTT) whose traffic should exit via the tunnel.
 func (t *tunnel) runOutboundSOCKS5(port int) {
 	defer t.wg.Done()
 
@@ -709,8 +670,7 @@ func (t *tunnel) runOutboundSOCKS5(port int) {
 	}
 }
 
-// handleOutboundSOCKS5 implements the SOCKS5 server-side handshake (RFC 1928)
-// and forwards the accepted connection to the real destination via WireGuard.
+// handleOutboundSOCKS5 handles one RFC 1928 CONNECT request, dialing via WireGuard.
 func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 	defer c.Close()                                     //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
@@ -791,9 +751,8 @@ func (t *tunnel) handleOutboundSOCKS5(c net.Conn) {
 	<-done
 }
 
-// multiHandler fans slog records out to stderr and (when available) syslog,
-// so that logs are visible both via systemd journal (ACAP 4) and via
-// systemlog.cgi (ACAP 3, where the init wrapper does not capture stderr).
+// multiHandler logs to stderr and syslog: stderr reaches the journal on ACAP 4,
+// but the ACAP 3 init wrapper drops it, so systemlog.cgi needs syslog.
 type multiHandler struct {
 	stderr *slog.TextHandler
 	sys    *syslog.Writer // nil if syslog unavailable
@@ -848,9 +807,8 @@ func main() {
 
 	app := &appState{configPath: configPath}
 
-	// Seed lastMod from the file so the 30s ticker doesn't trigger a
-	// spurious reload on its first fire (which would restart the tunnel
-	// before the 25s keepalive has a chance to initiate the handshake).
+	// Seed lastMod so the first 30 s tick doesn't restart the tunnel before the
+	// 25 s keepalive has started the handshake.
 	if info, err := os.Stat(configPath); err == nil { //nolint:gosec
 		app.lastMod = info.ModTime()
 	}

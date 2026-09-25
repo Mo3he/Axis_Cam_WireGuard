@@ -29,10 +29,8 @@ ARG ARCH
 COPY --from=gobuilder /opt/app /opt/app
 WORKDIR /opt/app
 
-# Patch the architecture placeholder in manifest.json
 RUN sed -i "s/\"BUILDARCH\"/\"${ARCH}\"/" manifest.json
 
-# Build the ACAP package (compiles the C binary and packages everything)
 RUN . /opt/axis/acapsdk/environment-setup* && acap-build .
 
 FROM scratch
