@@ -5,6 +5,10 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 1.2.17 - 2026-10-07
+
+- Update to upstream v0.0.0-20261006164505-2631ce99a06f.
+
 ## [1.2.16] - 2026-09-25 - Private key no longer written to the system log
 
 - Security fix: earlier versions wrote the WireGuard **private key** to the

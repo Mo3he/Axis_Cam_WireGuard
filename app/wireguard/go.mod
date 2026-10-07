@@ -2,7 +2,7 @@ module wireguard-acap
 
 go 1.26.0
 
-require golang.zx2c4.com/wireguard v0.0.0-20260522210424-ecfc5a8d5446
+require golang.zx2c4.com/wireguard v0.0.0-20261006164505-2631ce99a06f
 
 require (
 	github.com/google/btree v1.1.3 // indirect
