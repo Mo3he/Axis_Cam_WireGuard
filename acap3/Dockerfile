@@ -1,5 +1,5 @@
 ARG UBUNTU_VERSION=20.04
-ARG GO_VERSION=1.27.1
+ARG GO_VERSION=1.27.2
 
 # Build go binary
 FROM docker.io/golang:${GO_VERSION} AS gobuilder
