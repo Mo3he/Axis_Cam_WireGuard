@@ -8,6 +8,7 @@
       "vendorId": "70ee172dd9",
       "compatibleOsVersions": [
         {
+          "min": "12.10.68",
           "max": "13"
         }
       ],
