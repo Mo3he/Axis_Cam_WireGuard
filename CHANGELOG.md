@@ -5,6 +5,18 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.19] - 2026-11-11 - Local forwards for syslog
+
+- New **Local Forwards** setting: fixed TCP/UDP relays from `127.0.0.1` on
+  the camera to a host through the tunnel, written as comma-separated
+  `proto:localport:host:port`. Use it for camera services that cannot use a
+  proxy, mainly remote syslog: add `udp:5514:<server-tunnel-ip>:514`, then in
+  **System > Logs > Remote system log** set the server to `127.0.0.1`, protocol
+  UDP and port `5514`. The destination must be inside **Allowed IPs**
+  ([#9](https://github.com/Mo3he/Axis_Cam_WireGuard/issues/9)).
+- NTP still cannot be routed through the tunnel: the camera always sends it to
+  port 123, which an unprivileged app cannot listen on.
+
 ## 1.2.18 - 2026-10-26
 
 - Update to upstream v0.0.0-20261024220952-b3bc704ef0ee.
