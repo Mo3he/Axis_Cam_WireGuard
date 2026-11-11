@@ -80,6 +80,11 @@
           "name": "MTU",
           "default": "1420",
           "type": "string"
+        },
+        {
+          "name": "LocalForwards",
+          "default": "",
+          "type": "string"
         }
       ]
     }

@@ -4,7 +4,8 @@
 // WireGuard userspace VPN for Axis cameras (ACAP): wireguard-go on a gVisor
 // netstack, so no kernel TUN device, CAP_NET_ADMIN or root is needed.
 // Inbound: forwarded camera ports and a SOCKS5 proxy on the tunnel IP.
-// Outbound: HTTP CONNECT and SOCKS5 proxies on 127.0.0.1 that exit via the tunnel.
+// Outbound: HTTP CONNECT and SOCKS5 proxies on 127.0.0.1 that exit via the tunnel,
+// plus fixed TCP/UDP local forwards for services that cannot use a proxy (syslog).
 // Reloads the config written by config_updater.c on SIGUSR1 or file change.
 
 package main
@@ -27,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -42,6 +44,16 @@ var defaultForwardPorts = []int{80, 443, 554}
 
 // maxForwardPorts caps how many listeners a config can ask for.
 const maxForwardPorts = 16
+
+// Local forwards: 127.0.0.1:<port> on the camera relayed to a host through the
+// tunnel. Ports below 1024 need root, which an ACAP does not have.
+const (
+	maxLocalForwards  = 16
+	minLocalPort      = 1024
+	udpSessionIdle    = 2 * time.Minute
+	maxUDPSessions    = 64
+	maxUDPDatagramLen = 65535
+)
 
 // socks5Port is the SOCKS5 proxy port on the WireGuard interface (not host network).
 const socks5Port = 1080
@@ -66,6 +78,7 @@ type Config struct {
 	OutboundSOCKS5Port string
 	ForwardPorts       string
 	MTU                string
+	LocalForwards      string
 }
 
 // parseMTU returns defaultMTU for empty, unparseable or out-of-range values.
@@ -96,6 +109,65 @@ func parseForwardPorts(value string) []int {
 		return defaultForwardPorts
 	}
 	return ports
+}
+
+// localForward relays 127.0.0.1:port on the camera to dst through the tunnel.
+type localForward struct {
+	proto string // "tcp" or "udp"
+	port  int
+	dst   string // host:port, resolved with the host DNS when used
+}
+
+// parseLocalForwards reads comma-separated "proto:localport:host:port" entries,
+// e.g. "udp:5514:10.0.0.1:514". It returns up to maxLocalForwards valid entries
+// (first one wins per proto and local port) and the entries it rejected.
+func parseLocalForwards(value string) ([]localForward, []string) {
+	var fwds []localForward
+	var rejected []string
+	seen := make(map[string]bool)
+	for _, field := range strings.Split(value, ",") {
+		entry := strings.TrimSpace(field)
+		if entry == "" {
+			continue
+		}
+		f, ok := parseLocalForward(entry)
+		key := fmt.Sprintf("%s/%d", f.proto, f.port)
+		if !ok || seen[key] || len(fwds) == maxLocalForwards {
+			rejected = append(rejected, entry)
+			continue
+		}
+		seen[key] = true
+		fwds = append(fwds, f)
+	}
+	return fwds, rejected
+}
+
+func parseLocalForward(entry string) (localForward, bool) {
+	proto, rest, ok := strings.Cut(entry, ":")
+	if !ok {
+		return localForward{}, false
+	}
+	proto = strings.ToLower(strings.TrimSpace(proto))
+	if proto != "tcp" && proto != "udp" {
+		return localForward{}, false
+	}
+	portStr, dst, ok := strings.Cut(rest, ":")
+	if !ok {
+		return localForward{}, false
+	}
+	port, err := strconv.Atoi(strings.TrimSpace(portStr))
+	if err != nil || port < minLocalPort || port > 65535 {
+		return localForward{}, false
+	}
+	host, dstPortStr, err := net.SplitHostPort(strings.TrimSpace(dst))
+	if err != nil || host == "" {
+		return localForward{}, false
+	}
+	dstPort, err := strconv.Atoi(dstPortStr)
+	if err != nil || dstPort < 1 || dstPort > 65535 {
+		return localForward{}, false
+	}
+	return localForward{proto: proto, port: port, dst: net.JoinHostPort(host, dstPortStr)}, true
 }
 
 //nolint:gocyclo // one branch per config key; splitting it would not make it clearer
@@ -147,6 +219,8 @@ func loadConfig(path string) (*Config, error) {
 			cfg.ForwardPorts = val
 		case "mtu":
 			cfg.MTU = val
+		case "local_forwards":
+			cfg.LocalForwards = val
 		}
 	}
 	return cfg, scanner.Err()
@@ -288,6 +362,20 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 
 	t.wg.Add(1)
 	go t.runOutboundSOCKS5(socks5OutPort)
+
+	fwds, rejected := parseLocalForwards(cfg.LocalForwards)
+	for _, entry := range rejected {
+		slog.Warn("ignoring local forward; expected proto:localport:host:port with tcp or udp and a local port of 1024 or above",
+			"entry", entry)
+	}
+	for _, f := range fwds {
+		t.wg.Add(1)
+		if f.proto == "tcp" {
+			go t.runLocalTCPForward(f)
+		} else {
+			go t.runLocalUDPForward(f)
+		}
+	}
 
 	return t, nil
 }
@@ -533,20 +621,29 @@ func (t *tunnel) runHTTPProxy(port int) {
 	}
 }
 
-// dialViaWG resolves with the host DNS (the netstack has none) and dials through the tunnel.
-func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, error) {
+// resolveViaHost resolves hostport with the host DNS, since the netstack has none.
+func resolveViaHost(ctx context.Context, hostport string) (string, error) {
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if len(addrs) == 0 {
-		return nil, fmt.Errorf("no addresses resolved for %s", host)
+		return "", fmt.Errorf("no addresses resolved for %s", host)
 	}
-	return t.tnet.DialContext(ctx, "tcp", net.JoinHostPort(addrs[0], port))
+	return net.JoinHostPort(addrs[0], port), nil
+}
+
+// dialViaWG resolves with the host DNS and dials TCP through the tunnel.
+func (t *tunnel) dialViaWG(ctx context.Context, hostport string) (net.Conn, error) {
+	addr, err := resolveViaHost(ctx, hostport)
+	if err != nil {
+		return nil, err
+	}
+	return t.tnet.DialContext(ctx, "tcp", addr)
 }
 
 // handleHTTPProxy serves one client connection from the HTTP CONNECT proxy.
@@ -638,6 +735,180 @@ func (t *tunnel) handleHTTPProxy(c net.Conn) {
 		go func() { _, _ = io.Copy(upstream, rd); done <- struct{}{} }() //nolint:errcheck
 		go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }()  //nolint:errcheck
 		<-done
+	}
+}
+
+// runLocalTCPForward relays connections to 127.0.0.1:f.port to f.dst via the tunnel.
+func (t *tunnel) runLocalTCPForward(f localForward) {
+	defer t.wg.Done()
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", f.port))
+	if err != nil {
+		slog.Error("local forward listen failed, port is in use", "proto", "tcp", "port", f.port, "err", err)
+		return
+	}
+	go func() { <-t.stopCh; _ = ln.Close() }()
+	slog.Info("local forward ready", "proto", "tcp", "listen", ln.Addr(), "dst", f.dst)
+
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			select {
+			case <-t.stopCh:
+				return
+			default:
+				slog.Error("local forward accept", "port", f.port, "err", err)
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+		go t.handleLocalTCP(c, f.dst)
+	}
+}
+
+func (t *tunnel) handleLocalTCP(c net.Conn, dst string) {
+	defer c.Close() //nolint:errcheck
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	upstream, err := t.dialViaWG(ctx, dst)
+	cancel()
+	if err != nil {
+		slog.Warn("local forward dial failed", "proto", "tcp", "dst", dst, "err", err)
+		return
+	}
+	defer upstream.Close() //nolint:errcheck
+	done := make(chan struct{}, 2)
+	go func() { _, _ = io.Copy(upstream, c); done <- struct{}{} }() //nolint:errcheck
+	go func() { _, _ = io.Copy(c, upstream); done <- struct{}{} }() //nolint:errcheck
+	<-done
+}
+
+// udpSession is one local client's flow; replies from dst go back to it.
+type udpSession struct {
+	conn       net.Conn
+	lastActive atomic.Int64 // unix nanoseconds
+}
+
+func (s *udpSession) touch() { s.lastActive.Store(time.Now().UnixNano()) }
+
+func (s *udpSession) idle() bool {
+	return time.Since(time.Unix(0, s.lastActive.Load())) >= udpSessionIdle
+}
+
+// runLocalUDPForward relays datagrams sent to 127.0.0.1:f.port to f.dst via the
+// tunnel, keeping one tunnel socket per local client so replies find their way back.
+//
+//nolint:gocyclo
+func (t *tunnel) runLocalUDPForward(f localForward) {
+	defer t.wg.Done()
+
+	pc, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: f.port})
+	if err != nil {
+		slog.Error("local forward listen failed, port is in use", "proto", "udp", "port", f.port, "err", err)
+		return
+	}
+	go func() { <-t.stopCh; _ = pc.Close() }()
+	slog.Info("local forward ready", "proto", "udp", "listen", pc.LocalAddr(), "dst", f.dst)
+
+	var mu sync.Mutex
+	sessions := make(map[string]*udpSession)
+	defer func() {
+		mu.Lock()
+		for _, s := range sessions {
+			_ = s.conn.Close()
+		}
+		mu.Unlock()
+	}()
+
+	warnedFull := false
+	buf := make([]byte, maxUDPDatagramLen)
+	for {
+		n, src, err := pc.ReadFromUDP(buf)
+		if err != nil {
+			select {
+			case <-t.stopCh:
+				return
+			default:
+				slog.Error("local forward read", "port", f.port, "err", err)
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+
+		key := src.String()
+		mu.Lock()
+		s := sessions[key]
+		count := len(sessions)
+		mu.Unlock()
+
+		if s == nil {
+			if count >= maxUDPSessions {
+				if !warnedFull {
+					slog.Warn("local forward has too many clients, dropping datagrams", "port", f.port, "max", maxUDPSessions)
+					warnedFull = true
+				}
+				continue
+			}
+			s, err = t.newUDPSession(f.dst)
+			if err != nil {
+				slog.Warn("local forward dial failed", "proto", "udp", "dst", f.dst, "err", err)
+				continue
+			}
+			mu.Lock()
+			sessions[key] = s
+			mu.Unlock()
+			go t.returnUDP(pc, src, s, func() {
+				mu.Lock()
+				delete(sessions, key)
+				mu.Unlock()
+			})
+		}
+
+		s.touch()
+		if _, err := s.conn.Write(buf[:n]); err != nil {
+			slog.Warn("local forward write", "proto", "udp", "dst", f.dst, "err", err)
+		}
+	}
+}
+
+func (t *tunnel) newUDPSession(dst string) (*udpSession, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	addr, err := resolveViaHost(ctx, dst)
+	if err != nil {
+		return nil, err
+	}
+	raddr, err := netip.ParseAddrPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := t.tnet.DialUDPAddrPort(netip.AddrPort{}, raddr)
+	if err != nil {
+		return nil, err
+	}
+	s := &udpSession{conn: conn}
+	s.touch()
+	return s, nil
+}
+
+// returnUDP copies replies from the tunnel back to the local client until the
+// session has been idle for udpSessionIdle or the tunnel stops.
+func (t *tunnel) returnUDP(pc *net.UDPConn, client *net.UDPAddr, s *udpSession, remove func()) {
+	defer remove()
+	defer s.conn.Close() //nolint:errcheck
+	buf := make([]byte, maxUDPDatagramLen)
+	for {
+		_ = s.conn.SetReadDeadline(time.Now().Add(udpSessionIdle)) //nolint:errcheck
+		n, err := s.conn.Read(buf)
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() && !s.idle() {
+				continue
+			}
+			return
+		}
+		s.touch()
+		if _, err := pc.WriteToUDP(buf[:n], client); err != nil {
+			return
+		}
 	}
 }
 
