@@ -102,6 +102,7 @@ Open the app's settings page in the camera web UI and fill in:
 | **HTTP Proxy Port** | Port for the HTTP CONNECT proxy on localhost (default: `8080`) |
 | **Outbound SOCKS5 Port** | Port for the outbound SOCKS5 proxy on localhost (default: `1080`) |
 | **MTU** | Tunnel MTU (default: `1420`, valid range `576` to `1500`) |
+| **Local Forwards** | Fixed TCP/UDP relays from `127.0.0.1` on the camera to a host through the tunnel, as comma-separated `proto:localport:host:port` (e.g. `udp:5514:10.0.0.1:514`). Local ports must be `1024` or above. Empty by default |
 
 The Private Key field will appear blank when you revisit the settings, this is
 expected behavior for password-type parameters. The key is saved securely.
@@ -201,6 +202,7 @@ curl --digest -u "$USER:$PASS" \
 | **HTTP CONNECT proxy** | `http://127.0.0.1:<HTTPProxyPort>` | Routes outbound HTTP/HTTPS camera traffic through WireGuard |
 | **Outbound SOCKS5** | `127.0.0.1:<OutboundSOCKS5Port>` | Routes outbound TCP from camera services (e.g. MQTT) through WireGuard |
 | **Inbound SOCKS5** | `<wireguard-ip>:1080` | Allows WireGuard peers to reach any camera port |
+| **Local forwards** | `127.0.0.1:<localport>` (TCP or UDP) | Relays camera services that cannot use a proxy (e.g. syslog) to a fixed host through WireGuard |
 
 > **Security:** the inbound SOCKS5 proxy is bound to the tunnel IP and is
 > therefore reachable by any WireGuard peer. Restrict access with your VPN's own
@@ -239,6 +241,18 @@ HTTPS proxy: http://127.0.0.1:<HTTPProxyPort>
 
 **ACAP apps / services using SOCKS5:** set their proxy to
 `127.0.0.1:<OutboundSOCKS5Port>`.
+
+**Remote syslog:** syslog cannot use a proxy, so relay it with a local forward.
+Add `udp:5514:<server-tunnel-ip>:514` to **Local Forwards** (or
+`tcp:5514:<server-tunnel-ip>:601` for TCP), then in **System -> Logs -> Remote
+system log** set the server to `127.0.0.1`, the protocol to match, and the port
+to `5514`. The destination must be inside **Allowed IPs**. TLS syslog also
+works over a `tcp` forward, but the camera then checks the server certificate
+against `127.0.0.1`, so the certificate must allow that name.
+
+> [!NOTE]
+> NTP cannot be routed this way: the camera always sends it to port 123, which
+> an unprivileged app cannot listen on.
 
 ## Build from source
 
