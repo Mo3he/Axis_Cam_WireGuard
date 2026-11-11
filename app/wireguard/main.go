@@ -1,5 +1,5 @@
-// Copyright (C) 2024  Mo3he
-// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2024, Weston Blieden
+// SPDX-License-Identifier: BSD-3-Clause
 
 // WireGuard userspace VPN for Axis cameras (ACAP): wireguard-go on a gVisor
 // netstack, so no kernel TUN device, CAP_NET_ADMIN or root is needed.
