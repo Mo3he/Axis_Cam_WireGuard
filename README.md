@@ -286,6 +286,9 @@ status for this project:
   non-executable GNU_STACK (`RW`).
 - [x] **HTTPS-only UI check** - Web UI API calls use relative paths and no
   hardcoded remote `http://` or `ws://` endpoints.
+- [x] **HTTPS through the tunnel** - OS 13's web server answers `127.0.0.1` in
+  plain HTTP on every port, 443 included, so forwarded ports connect to
+  `127.0.0.2` instead (verified on 13.0.114).
 - [ ] **Sign via ACAP Portal** - Still required for production install on OS 13.
 
 Note: `compatibleOsVersions` is only enforced from AXIS OS 12.10 onward. Setting

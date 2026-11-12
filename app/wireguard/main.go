@@ -351,7 +351,7 @@ func startTunnel(cfg *Config) (*tunnel, error) {
 
 	for _, port := range parseForwardPorts(cfg.ForwardPorts) {
 		t.wg.Add(1)
-		go t.runTCPProxy(localAddr, port, fmt.Sprintf("127.0.0.1:%d", port))
+		go t.runTCPProxy(localAddr, port)
 	}
 
 	t.wg.Add(1)
@@ -435,8 +435,8 @@ func (t *tunnel) runHandshakeMonitor() {
 }
 
 // runTCPProxy listens on localAddr:port inside the WireGuard netstack and
-// forwards each accepted connection to dstAddr on the host.
-func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int, dstAddr string) {
+// forwards each accepted connection to the same camera port.
+func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int) {
 	defer t.wg.Done()
 
 	if port < 0 || port > 65535 {
@@ -450,7 +450,7 @@ func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int, dstAddr string) {
 		return
 	}
 	go func() { <-t.stopCh; _ = ln.Close() }()
-	slog.Info("transparent forwarder ready", "listen", listenAddr, "dst", dstAddr)
+	slog.Info("transparent forwarder ready", "listen", listenAddr, "dst", net.JoinHostPort(cameraHost, strconv.Itoa(port)))
 
 	for {
 		c, err := ln.Accept()
@@ -464,14 +464,14 @@ func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int, dstAddr string) {
 				continue
 			}
 		}
-		go relay(c, dstAddr)
+		go relay(c, port)
 	}
 }
 
-// relay opens a connection to dst and bidirectionally copies data.
-func relay(src net.Conn, dst string) {
+// relay connects to the camera port and bidirectionally copies data.
+func relay(src net.Conn, port int) {
 	defer src.Close() //nolint:errcheck
-	dstConn, err := net.DialTimeout("tcp", dst, 10*time.Second)
+	dstConn, err := dialCamera(port, true)
 	if err != nil {
 		return
 	}
@@ -483,7 +483,7 @@ func relay(src net.Conn, dst string) {
 }
 
 // runSOCKS5 serves SOCKS5 CONNECT on the tunnel IP. Only the requested port is
-// honoured; the destination is always 127.0.0.1 so it cannot be an open proxy.
+// honoured; the destination is always the camera so it cannot be an open proxy.
 func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 	defer t.wg.Done()
 
@@ -516,7 +516,7 @@ func (t *tunnel) runSOCKS5(localAddr netip.Addr, port int) {
 	}
 }
 
-// handleSOCKS5 handles one RFC 1928 CONNECT request, always dialing 127.0.0.1.
+// handleSOCKS5 handles one RFC 1928 CONNECT request, always dialing the camera.
 func handleSOCKS5(c net.Conn) {
 	defer c.Close()                                     //nolint:errcheck
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
@@ -572,10 +572,9 @@ func handleSOCKS5(c net.Conn) {
 		return
 	}
 
-	dst := fmt.Sprintf("127.0.0.1:%d", port)
 	_ = c.SetDeadline(time.Time{}) //nolint:errcheck
 
-	dstConn, err := net.DialTimeout("tcp", dst, 10*time.Second)
+	dstConn, err := dialCamera(int(port), false)
 	if err != nil {
 		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck // host unreachable
 		return
@@ -583,7 +582,7 @@ func handleSOCKS5(c net.Conn) {
 	defer dstConn.Close() //nolint:errcheck
 
 	// Success reply
-	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 127, 0, 0, 1, //nolint:errcheck
+	_, _ = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 127, 0, 0, 2, //nolint:errcheck
 		byte(port >> 8), byte(port)}) //nolint:gosec
 
 	done := make(chan struct{}, 2)
