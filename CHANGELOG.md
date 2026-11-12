@@ -5,17 +5,6 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## Unreleased
-
-- Fix HTTPS over the tunnel on AXIS OS 13. Its web server answers `127.0.0.1`
-  in plain HTTP on every port, 443 included, so the forwarded HTTPS port
-  returned plain HTTP. Forwarded ports now connect to `127.0.0.2`, which reaches
-  the same listeners as the network, and fall back to `127.0.0.1` for services
-  that listen only there (such as port 80 on an HTTPS-only device).
-- The inbound SOCKS5 proxy connects to `127.0.0.2` only, so services bound to
-  loopback, such as other apps' settings servers, are no longer reachable from
-  the VPN.
-
 ## [1.2.19] - 2026-11-11 - Local forwards for syslog
 
 - New **Local Forwards** setting: fixed TCP/UDP relays from `127.0.0.1` on
