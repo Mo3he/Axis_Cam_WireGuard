@@ -471,7 +471,7 @@ func (t *tunnel) runTCPProxy(localAddr netip.Addr, port int) {
 // relay connects to the camera port and bidirectionally copies data.
 func relay(src net.Conn, port int) {
 	defer src.Close() //nolint:errcheck
-	dstConn, err := dialCamera(port)
+	dstConn, err := dialCamera(port, forwardFallback)
 	if err != nil {
 		return
 	}
@@ -574,7 +574,7 @@ func handleSOCKS5(c net.Conn) {
 
 	_ = c.SetDeadline(time.Time{}) //nolint:errcheck
 
-	dstConn, err := dialCamera(int(port))
+	dstConn, err := dialCamera(int(port), socksFallback)
 	if err != nil {
 		_, _ = c.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck // host unreachable
 		return
