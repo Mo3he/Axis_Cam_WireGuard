@@ -14,7 +14,7 @@
       ],
       "vendorUrl": "https://github.com/Mo3he/Axis_Cam_WireGuard",
       "runMode": "respawn",
-      "version": "1.2.19",
+      "version": "1.2.20",
       "user": {
         "group": "sdk",
         "username": "sdk"

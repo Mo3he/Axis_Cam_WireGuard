@@ -5,8 +5,9 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## Unreleased
+## 1.2.20 - 2026-11-13
 
+- Update to upstream v0.0.0-20261024220952-b3bc704ef0ee.
 - Fix HTTPS over the tunnel on AXIS OS 13. Its web server answers `127.0.0.1`
   in plain HTTP on every port, 443 included, so HTTPS to the camera through
   the tunnel failed. Forwarded ports and the inbound SOCKS5 proxy now connect
