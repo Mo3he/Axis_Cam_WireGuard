@@ -46,10 +46,20 @@ build_arch() {
 	fi
 }
 
+PIDS=''
 for ARCH in aarch64 armv7hf; do
 	build_arch "$ARCH" &
+	PIDS="$PIDS $!"
 done
-wait
+
+FAILED=0
+for PID in $PIDS; do
+	if ! wait "$PID"; then
+		echo "Error: architecture build worker $PID failed" >&2
+		FAILED=1
+	fi
+done
+[ "$FAILED" -eq 0 ] || exit 1
 
 echo '==> Done!'
 ls -lh "$REPO_ROOT"/*.eap
