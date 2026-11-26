@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WireGuard VPN Client for Axis Cameras</title>
+  <meta name="description" content="Connect an Axis camera to an existing WireGuard network and access camera services remotely, without root or a kernel VPN driver.">
+  <link rel="canonical" href="https://mo3he.github.io/Axis_Cam_WireGuard/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mo3he.github.io/Axis_Cam_WireGuard/">
+  <meta property="og:title" content="WireGuard VPN Client for Axis Cameras">
+  <meta property="og:description" content="Connect an Axis camera to an existing WireGuard network and access camera services remotely, without root or a kernel VPN driver.">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="WireGuard VPN Client for Axis Cameras">
+  <meta name="twitter:description" content="Connect an Axis camera to an existing WireGuard network and access camera services remotely, without root or a kernel VPN driver.">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #181b23;
+      --surface-2: #1f232d;
+      --border: #262a35;
+      --text: #e4e6ed;
+      --muted: #8b8fa3;
+      --accent: #4f8ff7;
+      --accent-hover: #6ba1ff;
+      --accent-soft: rgba(79, 143, 247, 0.12);
+      --accent-line: rgba(79, 143, 247, 0.25);
+      --amber: #f59e0b;
+      --radius: 12px;
+    }
+    [data-theme="light"] {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --surface-2: #f1f3f7;
+      --border: #e0e3e8;
+      --text: #1a1d27;
+      --muted: #5f6577;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-soft: rgba(37, 99, 235, 0.08);
+      --accent-line: rgba(37, 99, 235, 0.25);
+      --amber: #b45309;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 0.05em 0.35em; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
+    section { padding: 3.5rem 0; }
+    .section-head { text-align: center; max-width: 680px; margin: 0 auto 2.25rem; }
+    .section-head h2 { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 0.5rem; text-wrap: balance; }
+    .section-head p { color: var(--muted); font-size: 1.05rem; }
+    .eyebrow { display: block; color: var(--accent); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.5rem; }
+    /* Nav */
+    nav { display: flex; justify-content: space-between; align-items: center; max-width: 1100px; margin: 0 auto; padding: 1.5rem 2rem; gap: 1rem; }
+    nav .logo { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+    nav .logo small { display: block; font-size: 0.75rem; font-weight: 500; color: var(--muted); }
+    nav .logo small a { color: inherit; }
+    nav .logo small a:hover { color: var(--text); }
+    nav .links { display: flex; gap: 1.5rem; align-items: center; }
+    nav .links a { color: var(--muted); font-size: 0.95rem; }
+    nav .links a:hover { color: var(--text); }
+    nav .links a.sponsor { color: #db61a2; }
+    .theme-toggle { background: none; border: 1px solid var(--border); color: var(--muted); cursor: pointer; border-radius: 8px; padding: 0.4rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s; width: 34px; height: 34px; }
+    .theme-toggle:hover { border-color: var(--muted); color: var(--text); }
+    .theme-toggle svg { width: 18px; height: 18px; }
+    /* Hero */
+    .hero { text-align: center; padding: 4.5rem 2rem 3rem; max-width: 820px; margin: 0 auto; }
+    .badge { display: inline-block; background: var(--accent-soft); color: var(--accent); padding: 0.35rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1.5rem; border: 1px solid var(--accent-line); }
+    .badge.beta { background: rgba(245, 158, 11, 0.12); color: var(--amber); border-color: rgba(245, 158, 11, 0.3); }
+    .hero h1 { font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 1.25rem; text-wrap: balance; }
+    .hero h1 span { color: var(--accent); }
+    @media (min-width: 641px) { .hero h1 span { white-space: nowrap; } }
+    .hero p { font-size: 1.2rem; color: var(--muted); max-width: 640px; margin: 0 auto 2rem; }
+    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-size: 0.95rem; font-weight: 600; transition: all 0.2s; }
+    .btn svg { width: 18px; height: 18px; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); color: #fff; }
+    .btn-outline { border: 1px solid var(--border); color: var(--text); background: transparent; }
+    .btn-outline:hover { border-color: var(--muted); color: var(--text); }
+    .disclaimer { max-width: 720px; margin: 0 auto; padding: 0 1.5rem; }
+    .disclaimer div { background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 10px; padding: 12px 18px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+    .disclaimer strong { color: var(--text); }
+    /* Story cards */
+    .story-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
+    .story { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.75rem; }
+    .story .q { font-size: 1.1rem; font-weight: 700; line-height: 1.35; margin-bottom: 0.6rem; }
+    .story .q::before { content: "\201C"; color: var(--accent); margin-right: 0.1rem; }
+    .story .q::after { content: "\201D"; color: var(--accent); margin-left: 0.05rem; }
+    .story p { color: var(--muted); font-size: 0.95rem; }
+    /* Flow diagram */
+    .flow { display: grid; grid-template-columns: 1fr auto 1.15fr auto 1fr; align-items: stretch; gap: 0.75rem; }
+    .flow-col { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .flow-col.core { border: 2px solid var(--accent); background: linear-gradient(180deg, var(--accent-soft), transparent 70%), var(--surface); }
+    .flow-col h3 { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .flow-col.core h3 { color: var(--accent); }
+    .node { display: flex; gap: 0.7rem; align-items: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 0.65rem 0.8rem; }
+    .node .i { font-size: 1.25rem; line-height: 1.3; }
+    .node strong { display: block; font-size: 0.93rem; line-height: 1.35; }
+    .node span { display: block; color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+    .flow-link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; color: var(--accent); min-width: 72px; }
+    .flow-link .arrow { font-size: 1.6rem; line-height: 1; }
+    .flow-link .arrow::before { content: "\2192"; }
+    .flow-link small { color: var(--muted); font-size: 0.75rem; text-align: center; max-width: 9rem; line-height: 1.35; }
+    .flow-note { text-align: center; color: var(--muted); font-size: 0.9rem; margin: 1.25rem auto 0; max-width: 760px; }
+    /* Preview */
+    .preview-tabs { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1rem; }
+    .preview-tabs button { font: inherit; font-size: 0.9rem; font-weight: 600; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 20px; padding: 0.4rem 1rem; cursor: pointer; }
+    .preview-tabs button:hover { color: var(--text); border-color: var(--muted); }
+    .preview-tabs button[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
+    .browser { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.55); }
+    .browser-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+    .dots { display: flex; gap: 6px; }
+    .dots i { width: 11px; height: 11px; border-radius: 50%; background: var(--border); display: block; }
+    .url { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.25rem 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sample { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--amber); background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 0.15rem 0.5rem; white-space: nowrap; }
+    .browser iframe { display: block; width: 100%; border: 0; background: #fff; }
+    .preview-foot { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; color: var(--muted); font-size: 0.85rem; margin-top: 0.9rem; }
+    /* Features */
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
+    .feature-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.75rem; }
+    .feature-card .icon { font-size: 1.6rem; margin-bottom: 0.75rem; }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .feature-card p { color: var(--muted); font-size: 0.92rem; line-height: 1.55; }
+    /* Download */
+    .download-card { max-width: 720px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.75rem; }
+    .download-card .row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .download-card h3 { font-size: 1.1rem; font-weight: 700; }
+    .version { font-size: 0.85rem; color: var(--muted); }
+    .arch-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .arch-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1rem; border-radius: 8px; font-size: 0.85rem; font-weight: 600; border: 1px solid var(--border); color: var(--text); background: transparent; transition: all 0.2s; }
+    .arch-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .arch-btn svg { width: 16px; height: 16px; }
+    .compat { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .compat th, .compat td { text-align: left; padding: 0.55rem 0.4rem; border-top: 1px solid var(--border); vertical-align: top; }
+    .compat th { color: var(--muted); font-weight: 600; width: 34%; }
+    .arch-help { color: var(--muted); font-size: 0.85rem; margin-top: 1rem; }
+    .arch-help strong { color: var(--text); }
+    /* Install */
+    .steps { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+    .step { display: flex; gap: 1rem; align-items: flex-start; }
+    .step-num { min-width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; border: 1px solid var(--accent-line); }
+    .step-text { padding-top: 0.35rem; }
+    .step-text strong { display: block; margin-bottom: 0.15rem; }
+    .step-text span { color: var(--muted); font-size: 0.92rem; }
+    .step-text span strong { display: inline; color: var(--text); margin: 0; }
+    /* FAQ */
+    .faq { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 0.75rem; }
+    .faq details { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1.2rem; }
+    .faq summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 1rem; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after { content: "+"; color: var(--accent); font-weight: 700; }
+    .faq details[open] summary::after { content: "\2212"; }
+    .faq details p { color: var(--muted); font-size: 0.93rem; margin-top: 0.6rem; }
+    /* Footer */
+    footer { border-top: 1px solid var(--border); text-align: center; padding: 2rem; color: var(--muted); font-size: 0.85rem; max-width: 1100px; margin: 2rem auto 0; }
+    footer .footer-links { display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    footer .fine { font-size: 0.75rem; opacity: 0.7; margin-top: 0.5rem; }
+    @media (max-width: 900px) {
+      .flow { grid-template-columns: 1fr; }
+      .flow-link { flex-direction: row; min-width: 0; padding: 0.15rem 0; }
+      .flow-link .arrow::before { content: "\2193"; }
+      .flow-link small { max-width: none; }
+    }
+    @media (max-width: 760px) {
+      nav { padding: 1rem 1.25rem; flex-wrap: wrap; }
+      nav .links { gap: 1rem; flex-wrap: wrap; }
+      nav .links .opt { display: none; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding: 0 1.25rem; }
+      section { padding: 2.5rem 0; }
+      .hero h1 { font-size: 2.1rem; }
+      .hero { padding: 3rem 1.25rem 2rem; }
+      .hero p { font-size: 1.05rem; }
+      .hero-buttons { flex-direction: column; align-items: center; }
+      .section-head h2 { font-size: 1.6rem; }
+      .dots { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="logo">WireGuard VPN + Axis<small><a href="https://mo3he.github.io/">Part of Mo3he's Axis camera projects</a></small></div>
+    <div class="links">
+      <a href="#how" class="opt">How it works</a>
+      <a href="#preview">Try it</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/Mo3he/Axis_Cam_WireGuard" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/sponsors/Mo3he" target="_blank" rel="noopener" class="sponsor opt">Sponsor</a>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light and dark theme">
+        <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="iconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="badge">Open Source &middot; ACAP for Axis devices</div>
+    <h1>Connect your Axis camera to <span>WireGuard</span></h1>
+    <p>Join an existing WireGuard network and reach camera services through the proxies and forwards you choose. Runs in userspace, directly on the camera.</p>
+    <div class="hero-buttons">
+      <a href="#preview" class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 18v3"/></svg> Try the live preview</a>
+      <a href="#download" class="btn btn-outline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download</a>
+    </div>
+  </header>
+
+  <div class="disclaimer"><div>
+    <strong>Disclaimer:</strong> This is an independent, community-developed ACAP package and is <strong>not an official Axis Communications product</strong>. It is not affiliated with, endorsed by, or supported by Axis Communications AB. Use at your own risk.
+  </div></div>
+
+  <main>
+    <section id="why">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Why you'd use it</span>
+          <h2>Real ways to use WireGuard VPN</h2>
+          <p>These examples show what the app can do and where it fits into an existing setup.</p>
+        </div>
+        <div class="story-grid">
+          <div class="story"><div class="q">I need to reach a camera from another network</div><p>Join the camera to your WireGuard network, then use a configured proxy or port forward to reach its services.</p></div>
+          <div class="story"><div class="q">I want to expose only a few services</div><p>Forward only the camera ports you need, or use the built-in HTTP CONNECT and SOCKS5 proxies.</p></div>
+          <div class="story"><div class="q">I don't want to install a VPN driver</div><p>The app runs without root access or a kernel TUN device, using userspace networking.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">How it works</span>
+          <h2>A camera joins your VPN; you choose what can pass through</h2>
+          <p>The camera connects to a WireGuard peer, while the app exposes selected camera services through proxies and port forwards.</p>
+        </div>
+        <div class="flow">
+          <div class="flow-col">
+            <h3>Your VPN</h3>
+            <div class="node"><span class="i" aria-hidden="true">🔑</span><div><strong>WireGuard peer</strong><span>Import a configuration for a network you control</span></div></div>
+          </div>
+          <div class="flow-link"><span class="arrow" aria-hidden="true"></span><small>encrypted tunnel</small></div>
+          <div class="flow-col core">
+            <h3>WireGuard VPN, on the camera</h3>
+            <div class="node"><span class="i" aria-hidden="true">🔒</span><div><strong>Encrypted tunnel</strong><span>Userspace WireGuard; no root or kernel TUN</span></div></div>
+            <div class="node"><span class="i" aria-hidden="true">↔️</span><div><strong>Selected services</strong><span>HTTP, SOCKS5, and fixed TCP/UDP forwards</span></div></div>
+          </div>
+          <div class="flow-link"><span class="arrow" aria-hidden="true"></span><small>selected proxies and ports</small></div>
+          <div class="flow-col">
+            <h3>Your devices</h3>
+            <div class="node"><span class="i" aria-hidden="true">🖥️</span><div><strong>VPN peers</strong><span>Reach the camera through the routes you configure</span></div></div>
+          </div>
+        </div>
+        <p class="flow-note">The preview uses invented sample data. Connect the app to your real device and network for live results.</p>
+      </div>
+    </section>
+
+    <section id="preview">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Try it</span>
+          <h2>Try the camera-side controls</h2>
+          <p>Explore the actual settings UI with a safe sample peer and fictitious values.</p>
+        </div>
+        <div class="browser">
+          <div class="browser-bar">
+            <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="url" id="previewUrl">https://192.168.0.90/local/WireGuard_VPN/index.html</div>
+            <span class="sample">Sample data</span>
+          </div>
+          <iframe id="previewFrame" src="preview/index.html" title="WireGuard VPN preview with sample data" style="height:900px" loading="lazy" sandbox="allow-scripts allow-same-origin allow-forms allow-modals"></iframe>
+        </div>
+        <div class="preview-foot">
+          <span>Sample data only. This preview isn't connected to a device. Don't enter real credentials.</span>
+          <a id="previewFull" href="preview/index.html" target="_blank" rel="noopener">Open the preview full screen &rarr;</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Features</span>
+          <h2>Remote access with explicit boundaries</h2>
+        </div>
+        <div class="features">
+          <div class="feature-card"><div class="icon" aria-hidden="true">🧩</div><h3>Use an existing peer config</h3><p>Import the WireGuard .conf supplied by your VPN administrator.</p></div>
+          <div class="feature-card"><div class="icon" aria-hidden="true">🌐</div><h3>Proxy camera traffic</h3><p>Use HTTP CONNECT or SOCKS5 from a device that can reach the VPN address.</p></div>
+          <div class="feature-card"><div class="icon" aria-hidden="true">🔌</div><h3>Forward specific ports</h3><p>Expose only the TCP or UDP services you configure.</p></div>
+          <div class="feature-card"><div class="icon" aria-hidden="true">🛡️</div><h3>No root required</h3><p>Runs through userspace networking on supported devices.</p></div>
+          <div class="feature-card"><div class="icon" aria-hidden="true">📱</div><h3>Fits two generations</h3><p>ACAP 4 supports aarch64 and armv7hf; a legacy ACAP 3 build is also available for armv7hf.</p></div>
+          <div class="feature-card"><div class="icon" aria-hidden="true">⚠️</div><h3>Limit peer access</h3><p>A VPN peer can reach enabled inbound proxies and forwarded services.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Download</span>
+          <h2>Get WireGuard VPN</h2>
+          <p>The buttons select signed ACAP 4 packages. Legacy ACAP 3 ARMv7 builds are listed on <a href="https://github.com/Mo3he/Axis_Cam_WireGuard/releases" target="_blank" rel="noopener">GitHub Releases</a>.</p>
+        </div>
+        <div class="download-card">
+          <div class="row"><h3>WireGuard VPN</h3><span class="version" id="relVersion">Latest release on GitHub</span></div>
+          <div class="arch-buttons">
+            <a class="arch-btn" data-arch="aarch64" href="https://github.com/Mo3he/Axis_Cam_WireGuard/releases" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> AARCH64</a>
+            <a class="arch-btn" data-arch="armv7hf" href="https://github.com/Mo3he/Axis_Cam_WireGuard/releases" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ARMv7</a>
+          </div>
+          <table class="compat">
+            <tr><th>AXIS OS</th><td>ACAP 4: 10.x to 13 &middot; legacy ACAP 3: 9.x to 10.x</td></tr>
+            <tr><th>Processor</th><td>AARCH64 and ARMv7 (ACAP 4); ARMv7 only (ACAP 3)</td></tr>
+            <tr><th>Root access</th><td>Not required</td></tr>
+          </table>
+          <p class="arch-help">Check your device's processor and AXIS OS against the compatibility information above before installing.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="install">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Install</span>
+          <h2>Up and running in a few minutes</h2>
+        </div>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Download the package</strong><span>Choose the matching architecture; use the legacy ACAP 3 package only for older devices.</span></div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Install it</strong><span>In the camera UI, go to <strong>Apps &rarr; Add app</strong> and upload the package.</span></div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Add your WireGuard configuration</strong><span>Open the app and import the <code>.conf</code> from your VPN administrator.</span></div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Choose proxies and forwards</strong><span>Enable only the camera services you need, then connect from an authorized VPN peer.</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Questions</span>
+          <h2>Good to know</h2>
+        </div>
+        <div class="faq">
+          <details><summary>Does this route every camera app through the VPN?</summary><p>No. The userspace build provides proxies and selected port forwards; it does not transparently route all firmware traffic.</p></details>
+          <details><summary>Who can use the inbound SOCKS5 proxy?</summary><p>Peers that can reach the camera over the VPN. Restrict VPN membership and keep camera services authenticated.</p></details>
+          <details><summary>What if an old unsigned build is installed?</summary><p>The README notes that upgrading to a signed build may require uninstalling the old package first.</p></details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-links">
+      <a href="https://github.com/Mo3he/Axis_Cam_WireGuard" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/Mo3he/Axis_Cam_WireGuard#readme" target="_blank" rel="noopener">Full documentation</a>
+      <a href="https://github.com/Mo3he/Axis_Cam_WireGuard/issues" target="_blank" rel="noopener">Report an issue</a>
+      <a href="https://mo3he.github.io/">All projects</a>
+      <a href="https://github.com/sponsors/Mo3he" target="_blank" rel="noopener">Sponsor</a>
+      <a href="https://buymeacoffee.com/mo3he" target="_blank" rel="noopener">Buy Me a Coffee</a>
+    </div>
+    <p>&copy; Mo3he &middot; BSD 3-Clause License</p>
+    <p class="fine">Bundled components retain their own licenses. Axis and AXIS OS are trademarks of Axis Communications AB.</p>
+  </footer>
+
+  <script>
+    (function () {
+      var html = document.documentElement;
+      var sun = document.getElementById('iconSun');
+      var moon = document.getElementById('iconMoon');
+      function applyTheme(theme) {
+        if (theme === 'light') { html.setAttribute('data-theme', 'light'); sun.style.display = 'none'; moon.style.display = 'block'; }
+        else { html.removeAttribute('data-theme'); sun.style.display = 'block'; moon.style.display = 'none'; }
+      }
+      var stored = localStorage.getItem('theme');
+      var lightQuery = window.matchMedia('(prefers-color-scheme: light)');
+      applyTheme(stored || (lightQuery.matches ? 'light' : 'dark'));
+      document.getElementById('themeToggle').addEventListener('click', function () {
+        var next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        localStorage.setItem('theme', next);
+        applyTheme(next);
+      });
+      lightQuery.addEventListener('change', function (e) {
+        if (!localStorage.getItem('theme')) applyTheme(e.matches ? 'light' : 'dark');
+      });
+
+      var frame = document.getElementById('previewFrame');
+      var url = document.getElementById('previewUrl');
+      var full = document.getElementById('previewFull');
+      var tabs = document.querySelectorAll('.preview-tabs button');
+      for (var t = 0; t < tabs.length; t++) {
+        tabs[t].addEventListener('click', function () {
+          for (var k = 0; k < tabs.length; k++) tabs[k].setAttribute('aria-selected', 'false');
+          this.setAttribute('aria-selected', 'true');
+          frame.src = this.getAttribute('data-src');
+          frame.title = this.getAttribute('data-title');
+          url.textContent = this.getAttribute('data-url');
+          full.href = this.getAttribute('data-src');
+        });
+      }
+
+      // Point the architecture buttons at the newest release's packages. Prefer a
+      // stable release; fall back to the newest pre-release for beta projects.
+      fetch('https://api.github.com/repos/Mo3he/Axis_Cam_WireGuard/releases?per_page=10')
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (releases) {
+          var rel = null, i;
+          for (i = 0; i < releases.length && !rel; i++) if (!releases[i].draft && !releases[i].prerelease) rel = releases[i];
+          for (i = 0; i < releases.length && !rel; i++) if (!releases[i].draft) rel = releases[i];
+          if (!rel) return;
+          document.getElementById('relVersion').textContent = rel.tag_name + (rel.prerelease ? ' (pre-release)' : '') + ' \u00b7 ' + new Date(rel.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+          var buttons = document.querySelectorAll('a[data-arch]');
+          for (i = 0; i < buttons.length; i++) {
+            var arch = buttons[i].getAttribute('data-arch');
+            for (var j = 0; j < rel.assets.length; j++) {
+              var name = rel.assets[j].name.toLowerCase();
+              if (name.endsWith('_' + arch + '.eap') && !name.includes('_hksv_')) {
+                buttons[i].href = rel.assets[j].browser_download_url;
+                buttons[i].removeAttribute('target');
+                break;
+              }
+            }
+          }
+        })
+        .catch(function () {});
+    })();
+  </script>
+</body>
+</html>
