@@ -241,7 +241,7 @@
     const link = event.target.closest && event.target.closest("a[href]");
     if (!link) return;
     const target = new URL(link.href, window.location.href);
-    if (target.origin !== window.location.origin || target.protocol === "javascript:") {
+    if (target.origin !== window.location.origin || (target.protocol !== "http:" && target.protocol !== "https:")) {
       event.preventDefault();
       event.stopImmediatePropagation();
       window.__previewBlockedExternal.push(target.href);
