@@ -34,7 +34,7 @@
         {
           "name": "PrivateKey",
           "default": "",
-          "type": "string"
+          "type": "password"
         },
         {
           "name": "ListenPort",

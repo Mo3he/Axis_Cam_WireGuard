@@ -104,8 +104,12 @@ Open the app's settings page in the camera web UI and fill in:
 | **MTU** | Tunnel MTU (default: `1420`, valid range `576` to `1500`) |
 | **Local Forwards** | Fixed TCP/UDP relays from `127.0.0.1` on the camera to a host through the tunnel, as comma-separated `proto:localport:host:port` (e.g. `udp:5514:10.0.0.1:514`). Local ports must be `1024` or above. Empty by default |
 
-The Private Key field will appear blank when you revisit the settings, this is
-expected behavior for password-type parameters. The key is saved securely.
+The Private Key field appears blank when you revisit the settings: the key never
+leaves the camera, and neither `param.cgi` nor the app's API returns it. The
+settings page shows the camera's **public key** instead. Leave the field blank
+to keep the saved key; click **Remove saved key** to delete it (the tunnel stops
+until a new key is saved). This works on devices without `param.cgi` too: the
+page falls back to the app's own settings API.
 
 > [!TIP]
 > Click **Import .conf** on the settings page to load all fields from a standard
@@ -155,8 +159,11 @@ root.wireguardconfig.ClientIP=10.0.0.2/24
 root.wireguardconfig.Endpoint=vpn.example.com:51820
 root.wireguardconfig.ListenPort=51820
 root.wireguardconfig.PeerPublicKey=<base64>
-root.wireguardconfig.PrivateKey=<base64>
+root.wireguardconfig.PrivateKey=******
 ```
+
+The private key is listed as `******`. The camera's public key is available from
+`https://<camera-ip>/local/wireguardconfig/api/settings` (`PublicKey`).
 
 ### Push a new config
 

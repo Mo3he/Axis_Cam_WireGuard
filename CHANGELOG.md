@@ -5,6 +5,16 @@ links to its full release notes on GitHub.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## Unreleased
+
+- The private key never leaves the camera. `param.cgi` lists it as `******`,
+  the settings API returns it blank with `PrivateKeySet`, and the settings page
+  shows the camera's public key instead. Before, both returned the key in
+  clear text, although the README said it was hidden.
+- Saving with the key field blank keeps the saved key. **Remove saved key** on
+  the settings page deletes it, through `param.cgi` or, on devices without it,
+  the app's settings API.
+
 ## 1.2.20 - 2026-11-13
 
 - Update to upstream v0.0.0-20261024220952-b3bc704ef0ee.
