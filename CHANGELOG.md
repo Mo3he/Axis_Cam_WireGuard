@@ -11,7 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   the settings API returns it blank with `PrivateKeySet`, and the settings page
   shows the camera's public key instead. Before, both returned the key in
   clear text, although the README said it was hidden.
-- Saving with the key field blank keeps the saved key.
+- Saving with the key field blank keeps the saved key. **Remove saved key** on
+  the settings page deletes it, through `param.cgi` or, on devices without it,
+  the app's settings API.
 
 ## 1.2.20 - 2026-11-13
 

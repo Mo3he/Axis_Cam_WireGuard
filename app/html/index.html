@@ -309,6 +309,7 @@
                 <div class="pubkey-value" id="pubkey-value"></div>
                 <button class="copy-btn" id="copy-pubkey" type="button">copy</button>
             </div>
+            <button class="btn btn-secondary" id="clear-key" type="button" style="display:none;margin-top:8px;">Remove saved key</button>
         </div>
     </div>
     <div class="field-grid">
@@ -518,6 +519,7 @@
                 storedPubkey = obj.PublicKey || '';
                 document.getElementById('f-privatekey').placeholder =
                     obj.PrivateKeySet ? 'Saved (leave blank to keep)' : 'Base64 private key';
+                document.getElementById('clear-key').style.display = obj.PrivateKeySet ? 'inline-block' : 'none';
                 updatePubkeyDisplay();
             })
             .catch(function() {});
@@ -777,6 +779,53 @@
         }, 1000);
     }
 
+    // param.cgi, else the app endpoint (devices without param.cgi).
+    function postSettings(vals) {
+        var cgiBody = ['action=update'].concat(Object.keys(vals).map(function(k) {
+            return 'root.' + APP + '.' + k + '=' + encodeURIComponent(vals[k]);
+        })).join('&');
+        var apiBody = Object.keys(vals).map(function(k) {
+            return k + '=' + encodeURIComponent(vals[k]);
+        }).join('&');
+
+        return fetch(PARAM_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: cgiBody
+        })
+        .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
+        .then(function(txt) { if (!/^OK/.test(txt.trim())) throw txt.trim(); return 'OK'; })
+        .catch(function() {
+            return fetch(API_URL, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: apiBody
+            })
+            .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
+            .then(function(txt) { return /OK/.test(txt) ? 'OK' : Promise.reject(); });
+        });
+    }
+
+    var clearBtn = document.getElementById('clear-key');
+    clearBtn.addEventListener('click', function() {
+        if (!confirm('Remove the saved private key? The tunnel stops until a new key is saved.')) return;
+        clearBtn.disabled = true;
+        setMsg('Removing key…');
+        postSettings({ PrivateKey: '' })
+        .then(function() {
+            setMsg('Key removed', 'ok');
+            storedPubkey = '';
+            document.getElementById('f-privatekey').value = '';
+            updatePubkeyDisplay();
+            startFastPoll();
+            setTimeout(loadStoredKey, 3000);
+        })
+        .catch(function(e) { setMsg('Request failed: ' + (e || 'remove failed'), 'err'); })
+        .finally(function() { clearBtn.disabled = false; });
+    });
+
     saveBtn.addEventListener('click', function() {
         saveBtn.disabled = true;
         setMsg('Saving…');
@@ -795,32 +844,8 @@
         };
         // A blank key field keeps the saved key.
         if (!vals.PrivateKey) delete vals.PrivateKey;
-        var cgiBody = ['action=update'].concat(Object.keys(vals).map(function(k) {
-            return 'root.' + APP + '.' + k + '=' + encodeURIComponent(vals[k]);
-        })).join('&');
-        var apiBody = Object.keys(vals).map(function(k) {
-            return k + '=' + encodeURIComponent(vals[k]);
-        }).join('&');
 
-        fetch(PARAM_URL, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: cgiBody
-        })
-        .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
-        .then(function(txt) { if (!/^OK/.test(txt.trim())) throw txt.trim(); return 'OK'; })
-        .catch(function() {
-            // param.cgi unavailable or rejected: use the app settings endpoint.
-            return fetch(API_URL, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: apiBody
-            })
-            .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
-            .then(function(txt) { return /OK/.test(txt) ? 'OK' : Promise.reject(); });
-        })
+        postSettings(vals)
         .then(function() {
             setMsg('Saved — reconnecting…', 'ok');
             startFastPoll();
