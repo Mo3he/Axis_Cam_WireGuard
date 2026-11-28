@@ -325,8 +325,7 @@ static gchar *http_build_settings_json(void) {
         /* The private key never leaves the camera: report whether one is set,
          * and the public key wireguard-userspace derived from it. */
         if (strcmp(http_param_names[i], "PrivateKey") == 0) {
-            g_string_append_printf(out, "\"PrivateKey\":\"\",\"PrivateKeySet\":%s",
-                                   (val && *val) ? "true" : "false");
+            g_string_append_printf(out, "\"PrivateKey\":\"\",\"PrivateKeySet\":%s", (val && *val) ? "true" : "false");
             g_free(val);
             continue;
         }
