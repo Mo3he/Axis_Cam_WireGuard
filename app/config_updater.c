@@ -25,6 +25,7 @@
 
 #define APP_NAME "wireguardconfig"
 #define CONFIG_FILE "/usr/local/packages/wireguardconfig/config.txt"
+#define PUBLIC_KEY_FILE "/usr/local/packages/wireguardconfig/public_key"
 #define WG_BINARY "/usr/local/packages/wireguardconfig/lib/wireguard-userspace"
 /* Localhost port for the settings fallback HTTP server. Must be unique per ACAP:
  * several of these VPN apps can run on the same device at once, and a shared
@@ -321,11 +322,26 @@ static gchar *http_build_settings_json(void) {
         }
         if (i)
             g_string_append_c(out, ',');
+        /* The private key never leaves the camera: report whether one is set,
+         * and the public key wireguard-userspace derived from it. */
+        if (strcmp(http_param_names[i], "PrivateKey") == 0) {
+            g_string_append_printf(out, "\"PrivateKey\":\"\",\"PrivateKeySet\":%s",
+                                   (val && *val) ? "true" : "false");
+            g_free(val);
+            continue;
+        }
         g_string_append_printf(out, "\"%s\":\"", http_param_names[i]);
         http_json_append_escaped(out, val ? val : "");
         g_string_append_c(out, '"');
         g_free(val);
     }
+    gchar *pub = NULL;
+    if (g_file_get_contents(PUBLIC_KEY_FILE, &pub, NULL, NULL))
+        g_strstrip(pub);
+    g_string_append(out, ",\"PublicKey\":\"");
+    http_json_append_escaped(out, pub ? pub : "");
+    g_string_append_c(out, '"');
+    g_free(pub);
     g_string_append_c(out, '}');
     /* Copy out and fully free: g_string_free(out, FALSE) is inlined by newer glib
      * headers into g_string_free_and_steal(), absent on older runtimes. */

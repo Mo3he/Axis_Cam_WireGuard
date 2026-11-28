@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,5 +77,27 @@ func TestParseLocalForwardsCap(t *testing.T) {
 	got, rejected := parseLocalForwards(strings.Join(entries, ","))
 	if len(got) != maxLocalForwards || len(rejected) != 2 {
 		t.Fatalf("got %d forwards and %d rejected, want %d and 2", len(got), len(rejected), maxLocalForwards)
+	}
+}
+
+func TestWritePublicKeyDerivesTheKeyAndRemovesItWhenInvalid(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.txt")
+	// RFC 7748 section 6.1, Alice.
+	priv, _ := hex.DecodeString("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+	want, _ := hex.DecodeString("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a")
+
+	writePublicKey(cfg, base64.StdEncoding.EncodeToString(priv))
+	got, err := os.ReadFile(filepath.Join(dir, "public_key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(got)) != base64.StdEncoding.EncodeToString(want) {
+		t.Fatalf("public key %q", got)
+	}
+
+	writePublicKey(cfg, "not-a-key")
+	if _, err := os.Stat(filepath.Join(dir, "public_key")); !os.IsNotExist(err) {
+		t.Fatalf("stale public key left for an invalid private key: %v", err)
 	}
 }

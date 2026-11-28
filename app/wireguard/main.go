@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/crypto/curve25519"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun/netstack"
@@ -1146,6 +1148,25 @@ func (a *appState) setStartFailed(failed bool) {
 	a.startFailed = failed
 }
 
+// writePublicKey stores the camera's public key next to the config, so the
+// settings page can show it without the private key ever leaving the camera.
+func writePublicKey(configPath, privateKey string) {
+	path := filepath.Join(filepath.Dir(configPath), "public_key")
+	priv, err := base64.StdEncoding.DecodeString(privateKey)
+	if err != nil || len(priv) != curve25519.ScalarSize {
+		_ = os.Remove(path)
+		return
+	}
+	pub, err := curve25519.X25519(priv, curve25519.Basepoint)
+	if err != nil {
+		_ = os.Remove(path)
+		return
+	}
+	if err := os.WriteFile(path, []byte(base64.StdEncoding.EncodeToString(pub)+"\n"), 0o644); err != nil { //nolint:gosec
+		slog.Warn("write public key", "err", err)
+	}
+}
+
 func (a *appState) reload() {
 	cfg, err := loadConfig(a.configPath)
 	if err != nil {
@@ -1153,6 +1174,7 @@ func (a *appState) reload() {
 		a.setStartFailed(true)
 		return
 	}
+	writePublicKey(a.configPath, cfg.PrivateKey)
 	if cfg.PrivateKey == "" || cfg.PeerPubKey == "" {
 		slog.Info("config incomplete — waiting for keys to be set")
 		a.setStartFailed(false)
