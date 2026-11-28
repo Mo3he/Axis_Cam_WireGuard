@@ -107,7 +107,15 @@ Open the app's settings page in the camera web UI and fill in:
 The Private Key field appears blank when you revisit the settings: the key never
 leaves the camera, and neither `param.cgi` nor the app's API returns it. The
 settings page shows the camera's **public key** instead. Leave the field blank
-to keep the saved key.
+to keep the saved key. To remove the saved key, set it to empty through
+`param.cgi`:
+
+```sh
+curl --digest -u admin:password \
+  --data-urlencode 'action=update' \
+  --data-urlencode 'root.wireguardconfig.PrivateKey=' \
+  'https://<camera-ip>/axis-cgi/param.cgi'
+```
 
 > [!TIP]
 > Click **Import .conf** on the settings page to load all fields from a standard
